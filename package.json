@@ -1,0 +1,47 @@
+{
+  "name": "inmo",
+  "description": "academic tracker",
+  "author": "rrr090",
+  "version": "1.0.0",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "dependencies": {
+    "electron-log": "^5.4.4",
+    "electron-updater": "^6.8.9",
+    "sqlite3": "^5.1.7"
+  },
+  "devDependencies": {
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.inmo",
+    "productName": "inmo",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "asarUnpack": [
+      "node_modules/sqlite3/**/*"
+    ],
+    "files": [
+      "src/index.js",
+      "src/preload.js",
+      "src/index.html",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "publish": {
+      "provider": "github",
+      "owner": "rrr090",
+      "repo": "inmo"
+    }
+  }
+}
