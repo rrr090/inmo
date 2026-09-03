@@ -35,6 +35,7 @@
       "src/index.js",
       "src/preload.js",
       "src/index.html",
+      "src/stuff.js",
       "package.json",
       "node_modules/**/*"
     ],

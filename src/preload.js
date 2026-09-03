@@ -13,5 +13,6 @@ contextBridge.exposeInMainWorld('api', {
   getHistory: () => ipcRenderer.invoke('get-history'),
   deleteSession: (sessionId) => ipcRenderer.invoke('delete-session', sessionId),
   getDailyStats: () => ipcRenderer.invoke('get-daily-stats'),
-  getAnalyticsBreakdown: () => ipcRenderer.invoke('get-analytics-breakdown')
+  getAnalyticsBreakdown: () => ipcRenderer.invoke('get-analytics-breakdown'),
+  updateTaskCourse: (data) => ipcRenderer.invoke('update-task-course', data)
 });

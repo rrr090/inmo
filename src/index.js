@@ -5,7 +5,6 @@ const log = require('electron-log');
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 
-
 const dbPath = path.join(app.getPath('userData'), 'academic_steam_spotify.db');
 const db = new sqlite3.Database(dbPath);
 
@@ -61,8 +60,8 @@ app.whenReady().then(() => {
   if (app.isPackaged) {
     autoUpdater.checkForUpdatesAndNotify();
   }
+  createWindow();
 });
-
 
 autoUpdater.on('checking-for-update', () => {
   log.info('Checking for updates...');
@@ -90,11 +89,27 @@ autoUpdater.on('update-downloaded', (info) => {
   autoUpdater.quitAndInstall();
 });
 
+// Исправленный метод для обновления кода курса в базе данных
+ipcMain.handle('update-course-code', async (event, { courseId, newCode }) => {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `UPDATE courses SET code = ? WHERE id = ?`,
+      [newCode, courseId],
+      function (err) {
+        if (err) reject(err);
+        else resolve({ success: true, changes: this.changes });
+      }
+    );
+  });
+});
+
+let mainWindow;
+
 function createWindow() {
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1300,
     height: 860,
-    backgroundColor: '#0a0a0c',
+    backgroundColor: '#0a0a0c', // Фикс белой вспышки при открытии/сворачивании
     titleBarStyle: 'hiddenInset',
     autoHideMenuBar: true,
     webPreferences: {
@@ -251,9 +266,9 @@ ipcMain.handle('get-daily-stats', () => {
     });
   });
 });
+
 ipcMain.handle('get-analytics-breakdown', () => {
   return new Promise((resolve, reject) => {
-    // Fetches last 7 days daily totals for charting
     const trendQuery = `
       SELECT DATE(created_at) as date, SUM(duration) as total_seconds 
       FROM study_sessions 
@@ -265,7 +280,6 @@ ipcMain.handle('get-analytics-breakdown', () => {
     db.all(trendQuery, [], (err, trendRows) => {
       if (err) return reject(err);
 
-      // Fetches current week vs last week total seconds for comparison
       const comparisonQuery = `
         SELECT 
           SUM(CASE WHEN created_at >= datetime('now', '-7 days') THEN duration ELSE 0 END) as current_week,
@@ -284,5 +298,4 @@ ipcMain.handle('get-analytics-breakdown', () => {
   });
 });
 
-app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
