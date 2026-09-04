@@ -26,7 +26,8 @@
     "win": {
       "target": [
         "nsis"
-      ]
+      ],
+      "artifactName": "${productName}.Setup.${version}.${ext}"
     },
     "asarUnpack": [
       "node_modules/sqlite3/**/*"
@@ -36,6 +37,7 @@
       "src/preload.js",
       "src/index.html",
       "src/stuff.js",
+      "src/index.css",
       "package.json",
       "node_modules/**/*"
     ],
