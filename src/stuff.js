@@ -58,6 +58,35 @@ function injectCustomScrollbarStyles() {
     ::-webkit-scrollbar-thumb:hover {
       background: var(--accent, #10b981);
     }
+
+    /* Выразительное выделение активных элементов и вкладок */
+    .course-item.active {
+      background: rgba(16, 185, 129, 0.15) !important;
+      border-left: 4px solid var(--accent, #10b981) !important;
+      box-shadow: inset 0 0 10px rgba(16, 185, 129, 0.1), 0 0 10px rgba(16, 185, 129, 0.25);
+      border-radius: 6px;
+    }
+    .course-item.active .title {
+      color: #ffffff !important;
+      font-weight: 700 !important;
+    }
+    .course-item.active .code {
+      color: var(--accent, #10b981) !important;
+      font-weight: 600 !important;
+    }
+    .nav-link.active {
+      background: var(--accent, #10b981) !important;
+      color: #000000 !important;
+      font-weight: 700 !important;
+      box-shadow: 0 0 12px rgba(16, 185, 129, 0.4) !important;
+      border-radius: 6px;
+    }
+    .tab-button.active, .mode-tab.active {
+      background: var(--accent, #10b981) !important;
+      color: #000000 !important;
+      font-weight: 700 !important;
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.3) !important;
+    }
   `;
   document.head.appendChild(style);
 }
@@ -65,6 +94,7 @@ function injectCustomScrollbarStyles() {
 function getActiveCourse() {
   return courses.find(c => c.id === activeCourseId) || courses[0] || null;
 }
+
 function renderCourses() {
   const list = document.getElementById('course-list');
   if (!list) return;
@@ -75,7 +105,6 @@ function renderCourses() {
     item.className = `course-item ${activeCourseId === course.id ? 'active' : ''}`;
     item.id = `course-row-${course.id}`;
     
-    // Если курс сейчас редактируется, рисуем инпуты прямо в строке
     if (course.isEditing) {
       item.innerHTML = `
         <div style="display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 4px;" onclick="event.stopPropagation()">
@@ -88,7 +117,6 @@ function renderCourses() {
         </div>
       `;
     } else {
-      // Обычный вид карточки курса
       item.innerHTML = `
         <div class="course-info" onclick="window.selectCourse('${course.id}')" style="cursor: pointer; flex-grow: 1; overflow: hidden;">
           <div class="title" id="course-title-${course.id}" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${course.title}</div>
@@ -109,11 +137,10 @@ function renderCourses() {
 
 function enableCourseEdit(courseId) {
   courses.forEach(c => {
-    c.isEditing = (c.id === courseId); // Включаем режим редактирования только для выбранного курса
+    c.isEditing = (c.id === courseId);
   });
   renderCourses();
   
-  // Фокус на инпут названия
   setTimeout(() => {
     const titleInput = document.getElementById(`edit-title-${courseId}`);
     if (titleInput) {
@@ -143,63 +170,128 @@ async function saveCourseInfo(courseId) {
   }
 
   try {
-    if (window.api.updateCourse) {
-      await window.api.updateCourse({ courseId, title: newTitle, code: newCode });
-    } else {
-      await window.api.updateCourseCode({ courseId, newCode });
+    if (typeof window.api.updateCourse !== 'function') {
+      // Preload doesn't expose an update-course bridge yet - fail loudly instead of
+      // silently reloading the old, unchanged data.
+      console.error('saveCourseInfo: window.api.updateCourse is not available. Add it to preload.js and an "update-course" IPC handler in main.js.');
+      alert('Could not save changes: the app is missing the update-course function. See console for details.');
+      return;
     }
 
+    await window.api.updateCourse({ courseId, title: newTitle, code: newCode });
+
     courses = await window.api.getCourses();
+
+    const saved = courses.find(c => c.id === courseId);
+    if (saved && (saved.title !== newTitle || saved.code !== newCode)) {
+      // The API call resolved but the refetched data doesn't match what we tried to save.
+      console.warn('saveCourseInfo: data after refetch does not match what was saved', { expected: { newTitle, newCode }, got: saved });
+      alert('Warning: the save may not have persisted correctly. Please double-check the course info.');
+    }
+
+    courses.forEach(c => c.isEditing = false);
     renderCourses();
     renderTimerCourseSelect();
     loadTasks();
   } catch (err) {
     console.error('Failed to update course info:', err);
+    alert(`Failed to save changes: ${err.message || err}`);
   }
 }
 
 function renderTimerCourseSelect() {
-  const select = document.getElementById('global-timer-course-select');
-  if (!select) return;
-  select.innerHTML = '';
-  courses.forEach(c => {
-    const opt = document.createElement('option');
-    opt.value = c.id;
-    opt.innerText = `${c.code} - ${c.title}`;
-    if (c.id === activeCourseId) opt.selected = true;
-    select.appendChild(opt);
-  });
+  const el = document.getElementById('global-timer-course-select');
+  if (!el) return;
+
+  const activeCourse = getActiveCourse();
+  const displayText = activeCourse 
+    ? `<span style="color: var(--accent, #10b981); font-weight: 800; font-size: 15px; text-shadow: 0 0 8px rgba(16, 185, 129, 0.3);">${activeCourse.code}</span> <span style="color: #64748b; font-weight: 400;">—</span> <span style="color: #f8fafc; font-weight: 600; font-size: 14px;">${activeCourse.title}</span>`
+    : '<span style="color: #94a3b8; font-style: italic;">No course selected</span>';
+
+  if (el.tagName === 'SELECT') {
+    const badgeContainer = document.createElement('div');
+    badgeContainer.id = 'global-timer-course-select';
+    badgeContainer.style.cssText = 'padding: 6px 14px; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 6px; display: inline-flex; align-items: center; gap: 8px; font-family: inherit; margin-top: 4px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);';
+    badgeContainer.innerHTML = displayText;
+    el.parentNode.replaceChild(badgeContainer, el);
+  } else {
+    el.style.cssText = 'padding: 6px 14px; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 6px; display: inline-flex; align-items: center; gap: 8px; font-family: inherit; margin-top: 4px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);';
+    el.innerHTML = displayText;
+  }
 }
 
 function selectCourse(id) {
-  stopActiveTimer(); // Останавливаем таймер при смене курса
+  stopActiveTimer();
   activeCourseId = id;
   renderCourses();
   renderTimerCourseSelect();
   loadTasks();
+  switchToTimerPage();
 }
 
-function stopActiveTimer() {
+async function stopActiveTimer() {
+  if (isStudying) {
+    isStudying = false;
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+
+    const currentCourse = getActiveCourse();
+    let durationToSave = timerMode === 'stopwatch' ? secondsElapsed : (25 * 60 - secondsElapsed);
+
+    if (currentCourse && durationToSave > 30) {
+      try {
+        await window.api.saveSession(currentCourse.id, durationToSave);
+        dailyStats = await window.api.getDailyStats();
+        courses = await window.api.getCourses();
+        renderCourses();
+        updateMetricsDashboard();
+      } catch (err) {
+        console.error('Error saving session on timer stop:', err);
+      }
+    }
+  }
+
   if (currentTimerInterval) {
     clearInterval(currentTimerInterval);
     currentTimerInterval = null;
-    activeCourseId = null;
-    console.log("Таймер остановлен при смене вкладки");
+  }
+
+  secondsElapsed = timerMode === 'stopwatch' ? 0 : 25 * 60;
+  updateTimerDisplay();
+
+  const timerBtn = document.getElementById('timer-btn');
+  const playIcon = document.getElementById('play-icon');
+  if (timerBtn && playIcon) {
+    timerBtn.classList.remove('running');
+    playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
   }
 }
 
 function switchTab(targetTabId) {
-  // Перед тем как скрыть/сменить интерфейс — гасим таймер
   stopActiveTimer(); 
-
-  // Твой стандартный код переключения вкладок...
   document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
-  document.getElementById(targetTabId).classList.add('active');
+  const targetTab = document.getElementById(targetTabId);
+  if (targetTab) targetTab.classList.add('active');
+
+  document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+  const matchingButton = document.querySelector(`[onclick*="switchTab('${targetTabId}')"]`);
+  if (matchingButton) matchingButton.classList.add('active');
+}
+
+function switchToTimerPage() {
+  // The timer lives on 'timer-page' ("Focus Engine"), switched via the existing
+  // switchPage() function and highlighted through its matching sidebar nav-link.
+  const timerNavLink = document.querySelector(`.nav-link[onclick*="switchPage('timer-page'"]`);
+  switchPage('timer-page', timerNavLink);
 }
 
 function onTimerCourseChange(id) {
+  stopActiveTimer();
   activeCourseId = id;
   renderCourses();
+  renderTimerCourseSelect();
   loadTasks();
 }
 
@@ -277,15 +369,26 @@ async function renderTrendChart() {
   const trend = analyticsData.trend;
   const comp = analyticsData.comparison;
 
-  const prev = comp.previous_week || 1;
-  const curr = comp.current_week || 0;
-  const pctChange = Math.round(((curr - prev) / prev) * 100);
+  const prevWeek = comp.previous_week || 0;
+  const currWeek = comp.current_week || 0;
+
+  let pctChange = 0;
+  let pctDisplay = '0%';
+  if (prevWeek > 0) {
+    // Normal case: real previous-week data to compare against
+    pctChange = Math.round(((currWeek - prevWeek) / prevWeek) * 100);
+    pctDisplay = `${pctChange > 0 ? '+' : ''}${pctChange}%`;
+  } else if (currWeek > 0) {
+    // No previous-week data but studied this week: show as new activity instead of a bogus % (was dividing by a fake "1")
+    pctChange = 100;
+    pctDisplay = 'New';
+  }
+
   const badgeColor = pctChange >= 0 ? 'var(--accent)' : 'var(--danger)';
-  const sign = pctChange > 0 ? '+' : '';
-  
+
   const compBadge = document.getElementById('weekly-comparison-badge');
   if (compBadge) {
-    compBadge.innerHTML = `Week-over-Week: <span style="color: ${badgeColor};">${sign}${pctChange}%</span>`;
+    compBadge.innerHTML = `Week-over-Week: <span style="color: ${badgeColor};">${pctDisplay}</span>`;
   }
 
   const labels = [];
@@ -635,6 +738,8 @@ window.enableCourseEdit = enableCourseEdit;
 window.saveCourseInfo = saveCourseInfo;
 window.switchPage = switchPage;
 window.cancelCourseEdit = cancelCourseEdit;
+window.switchTab = switchTab;
+window.switchToTimerPage = switchToTimerPage;
 
 
 // ==========================================

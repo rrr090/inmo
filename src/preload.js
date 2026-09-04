@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('api', {
   getCourses: () => ipcRenderer.invoke('get-courses'),
   addCourse: (title, code) => ipcRenderer.invoke('add-course', { title, code }),
+  updateCourse: (data) => ipcRenderer.invoke('update-course', data),
   deleteCourse: (courseId) => ipcRenderer.invoke('delete-course', courseId),
   resetCourseTime: (courseId) => ipcRenderer.invoke('reset-course-time', courseId),
   saveSession: (courseId, duration) => ipcRenderer.invoke('save-session', { courseId, duration }),

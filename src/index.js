@@ -89,15 +89,15 @@ autoUpdater.on('update-downloaded', (info) => {
   autoUpdater.quitAndInstall();
 });
 
-// Исправленный метод для обновления кода курса в базе данных
-ipcMain.handle('update-course-code', async (event, { courseId, newCode }) => {
+// Updates a course's title and code in the database
+ipcMain.handle('update-course', async (event, { courseId, title, code }) => {
   return new Promise((resolve, reject) => {
     db.run(
-      `UPDATE courses SET code = ? WHERE id = ?`,
-      [newCode, courseId],
+      `UPDATE courses SET title = ?, code = ? WHERE id = ?`,
+      [title, code, courseId],
       function (err) {
         if (err) reject(err);
-        else resolve({ success: true, changes: this.changes });
+        else resolve({ success: true, changes: this.changes, id: courseId, title, code });
       }
     );
   });
