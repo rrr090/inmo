@@ -12,6 +12,8 @@ let secondsElapsed = 0;
 let isStudying = false;
 let timerMode = 'stopwatch';
 
+let currentTimerInterval = null;
+
 
 // ==========================================
 // 2. ИНИЦИАЛИЗАЦИЯ И УПРАВЛЕНИЕ КУРСАМИ
@@ -63,7 +65,6 @@ function injectCustomScrollbarStyles() {
 function getActiveCourse() {
   return courses.find(c => c.id === activeCourseId) || courses[0] || null;
 }
-
 function renderCourses() {
   const list = document.getElementById('course-list');
   if (!list) return;
@@ -74,53 +75,58 @@ function renderCourses() {
     item.className = `course-item ${activeCourseId === course.id ? 'active' : ''}`;
     item.id = `course-row-${course.id}`;
     
-    item.innerHTML = `
-      <div class="course-info" onclick="window.selectCourse('${course.id}')" style="cursor: pointer; flex-grow: 1; overflow: hidden;">
-        <div class="title" id="course-title-${course.id}" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${course.title}</div>
-        <div class="code" id="code-container-${course.id}">
-          <span id="code-text-${course.id}">${course.code}</span> 
-          • ${formatHM(course.total_seconds)}
+    // Если курс сейчас редактируется, рисуем инпуты прямо в строке
+    if (course.isEditing) {
+      item.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 4px;" onclick="event.stopPropagation()">
+          <input type="text" id="edit-title-${course.id}" value="${course.title}" placeholder="Course Title" style="background: var(--bg-main); border: 1px solid var(--accent); color: white; padding: 4px 6px; border-radius: 4px; font-size: 13px; width: 100%;" />
+          <div style="display: flex; gap: 6px; align-items: center;">
+            <input type="text" id="edit-code-${course.id}" value="${course.code}" placeholder="Code" style="background: var(--bg-main); border: 1px solid var(--accent); color: white; padding: 3px 6px; border-radius: 4px; font-size: 12px; width: 80px;" />
+            <button onclick="event.stopPropagation(); window.saveCourseInfo('${course.id}')" style="background: var(--accent); border: none; color: black; border-radius: 3px; padding: 3px 8px; cursor: pointer; font-weight: bold; font-size: 12px;">Save</button>
+            <button onclick="event.stopPropagation(); window.cancelCourseEdit('${course.id}')" style="background: transparent; border: 1px solid var(--border-color); color: white; border-radius: 3px; padding: 3px 6px; cursor: pointer; font-size: 12px;">Cancel</button>
+          </div>
         </div>
-      </div>
-      <div style="display: flex; gap: 4px; align-items: center; flex-shrink: 0;">
-        <button style="background: transparent; border: none; color: #94a3b8; padding: 2px 4px; border-radius: 4px; cursor: pointer; font-size: 11px; opacity: 0.5; transition: opacity 0.2s, color 0.2s;" onmouseover="this.style.opacity='1'; this.style.color='#ffffff'" onmouseout="this.style.opacity='0.5'; this.style.color='#94a3b8'" onclick="event.stopPropagation(); window.enableCourseEdit('${course.id}', '${course.title.replace(/'/g, "\\'")}', '${course.code}')" title="Edit Course">Edit</button>
-        <button class="delete-course-btn" title="Delete Course" onclick="event.stopPropagation(); window.handleDeleteCourse('${course.id}')" style="background: transparent; border: none; color: #ef4444; cursor: pointer; font-size: 16px; padding: 0 4px; opacity: 0.7;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">×</button>
-      </div>
-    `;
+      `;
+    } else {
+      // Обычный вид карточки курса
+      item.innerHTML = `
+        <div class="course-info" onclick="window.selectCourse('${course.id}')" style="cursor: pointer; flex-grow: 1; overflow: hidden;">
+          <div class="title" id="course-title-${course.id}" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${course.title}</div>
+          <div class="code" id="code-container-${course.id}">
+            <span id="code-text-${course.id}">${course.code}</span> 
+            • ${formatHM(course.total_seconds)}
+          </div>
+        </div>
+        <div style="display: flex; gap: 4px; align-items: center; flex-shrink: 0;">
+          <button style="background: transparent; border: none; color: #94a3b8; padding: 2px 4px; border-radius: 4px; cursor: pointer; font-size: 11px; opacity: 0.5; transition: opacity 0.2s, color 0.2s;" onmouseover="this.style.opacity='1'; this.style.color='#ffffff'" onmouseout="this.style.opacity='0.5'; this.style.color='#94a3b8'" onclick="event.stopPropagation(); window.enableCourseEdit('${course.id}')" title="Edit Course">Edit</button>
+          <button class="delete-course-btn" title="Delete Course" onclick="event.stopPropagation(); window.handleDeleteCourse('${course.id}')" style="background: transparent; border: none; color: #ef4444; cursor: pointer; font-size: 16px; padding: 0 4px; opacity: 0.7;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">×</button>
+        </div>
+      `;
+    }
     list.appendChild(item);
   });
 }
 
-function enableCourseEdit(courseId, currentTitle, currentCode) {
-  const itemRow = document.getElementById(`course-row-${courseId}`);
-  if (!itemRow) return;
+function enableCourseEdit(courseId) {
+  courses.forEach(c => {
+    c.isEditing = (c.id === courseId); // Включаем режим редактирования только для выбранного курса
+  });
+  renderCourses();
+  
+  // Фокус на инпут названия
+  setTimeout(() => {
+    const titleInput = document.getElementById(`edit-title-${courseId}`);
+    if (titleInput) {
+      titleInput.focus();
+      titleInput.select();
+    }
+  }, 50);
+}
 
-  itemRow.innerHTML = `
-    <div style="display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 4px;" onclick="event.stopPropagation()">
-      <input type="text" id="edit-title-${courseId}" value="${currentTitle}" placeholder="Course Title" style="background: var(--bg-main); border: 1px solid var(--accent); color: white; padding: 4px 6px; border-radius: 4px; font-size: 13px; width: 100%;" />
-      <div style="display: flex; gap: 6px; align-items: center;">
-        <input type="text" id="edit-code-${courseId}" value="${currentCode}" placeholder="Code" style="background: var(--bg-main); border: 1px solid var(--accent); color: white; padding: 3px 6px; border-radius: 4px; font-size: 12px; width: 80px;" />
-        <button id="save-info-btn-${courseId}" style="background: var(--accent); border: none; color: black; border-radius: 3px; padding: 3px 8px; cursor: pointer; font-weight: bold; font-size: 12px;">Save</button>
-        <button id="cancel-info-btn-${courseId}" style="background: transparent; border: 1px solid var(--border-color); color: white; border-radius: 3px; padding: 3px 6px; cursor: pointer; font-size: 12px;">Cancel</button>
-      </div>
-    </div>
-  `;
-
-  const titleInput = document.getElementById(`edit-title-${courseId}`);
-  if (titleInput) {
-    titleInput.focus();
-    titleInput.select();
-  }
-
-  document.getElementById(`save-info-btn-${courseId}`).onclick = async (e) => {
-    e.stopPropagation();
-    await window.saveCourseInfo(courseId);
-  };
-
-  document.getElementById(`cancel-info-btn-${courseId}`).onclick = (e) => {
-    e.stopPropagation();
-    renderCourses();
-  };
+function cancelCourseEdit(courseId) {
+  const course = courses.find(c => c.id === courseId);
+  if (course) course.isEditing = false;
+  renderCourses();
 }
 
 async function saveCourseInfo(courseId) {
@@ -166,10 +172,29 @@ function renderTimerCourseSelect() {
 }
 
 function selectCourse(id) {
+  stopActiveTimer(); // Останавливаем таймер при смене курса
   activeCourseId = id;
   renderCourses();
   renderTimerCourseSelect();
   loadTasks();
+}
+
+function stopActiveTimer() {
+  if (currentTimerInterval) {
+    clearInterval(currentTimerInterval);
+    currentTimerInterval = null;
+    activeCourseId = null;
+    console.log("Таймер остановлен при смене вкладки");
+  }
+}
+
+function switchTab(targetTabId) {
+  // Перед тем как скрыть/сменить интерфейс — гасим таймер
+  stopActiveTimer(); 
+
+  // Твой стандартный код переключения вкладок...
+  document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+  document.getElementById(targetTabId).classList.add('active');
 }
 
 function onTimerCourseChange(id) {
@@ -189,6 +214,8 @@ function formatHM(totalSecs) {
 // 3. НАВИГАЦИЯ И ДЭШБОРД
 // ==========================================
 async function switchPage(pageId, element) {
+  stopActiveTimer(); 
+  
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-link').forEach(n => n.classList.remove('active'));
   
@@ -607,6 +634,7 @@ window.handleAddCourse = handleAddCourse;
 window.enableCourseEdit = enableCourseEdit;
 window.saveCourseInfo = saveCourseInfo;
 window.switchPage = switchPage;
+window.cancelCourseEdit = cancelCourseEdit;
 
 
 // ==========================================
