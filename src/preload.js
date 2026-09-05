@@ -15,5 +15,11 @@ contextBridge.exposeInMainWorld('api', {
   deleteSession: (sessionId) => ipcRenderer.invoke('delete-session', sessionId),
   getDailyStats: () => ipcRenderer.invoke('get-daily-stats'),
   getAnalyticsBreakdown: () => ipcRenderer.invoke('get-analytics-breakdown'),
-  updateTaskCourse: (data) => ipcRenderer.invoke('update-task-course', data)
+  updateTaskCourse: (data) => ipcRenderer.invoke('update-task-course', data),
+
+  // Mini widget (always-on-top timer when minimized)
+  getSetting: (key) => ipcRenderer.invoke('get-setting', key),
+  setSetting: (key, value) => ipcRenderer.invoke('set-setting', { key, value }),
+  sendTimerState: (data) => ipcRenderer.send('timer-state-update', data),
+  onStopTimerRequest: (callback) => ipcRenderer.on('stop-timer-request', () => callback())
 });

@@ -78,6 +78,41 @@ body {
     }
     .nav-link.active { border-left: 3px solid var(--accent); }
 
+    .setting-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 10px 4px 10px; margin-top: 6px;
+      border-top: 1px solid var(--border-color);
+    }
+    .setting-row-info { display: flex; align-items: center; gap: 10px; }
+    .setting-row-icon { font-size: 16px; line-height: 1; }
+    .setting-row-title { font-size: 12px; font-weight: 700; color: var(--text-main); }
+    .setting-row-desc { font-size: 10px; color: var(--text-sub); margin-top: 1px; }
+
+    .toggle-switch {
+      position: relative; display: inline-block;
+      width: 38px; height: 21px; flex-shrink: 0; cursor: pointer;
+    }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .toggle-slider {
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      background: var(--bg-surface); border: 1px solid var(--border-color);
+      border-radius: 22px; transition: background 0.2s ease, border-color 0.2s ease;
+    }
+    .toggle-slider::before {
+      content: "";
+      position: absolute; height: 15px; width: 15px; left: 2px; top: 2px;
+      background: var(--text-sub); border-radius: 50%;
+      transition: transform 0.2s ease, background 0.2s ease;
+    }
+    .toggle-switch input:checked + .toggle-slider {
+      background: var(--accent); border-color: var(--accent);
+      box-shadow: 0 0 10px var(--accent-glow);
+    }
+    .toggle-switch input:checked + .toggle-slider::before {
+      transform: translateX(17px);
+      background: #000;
+    }
+
     .library-header {
       display: flex; justify-content: space-between; align-items: center;
       color: var(--text-sub); font-size: 11px; font-weight: 700; letter-spacing: 0.5px;

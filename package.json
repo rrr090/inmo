@@ -39,6 +39,8 @@
       "src/stuff.js",
       "src/index.css",
       "package.json",
+      "src/miniwidget.html",
+      "src/minipreload.js",
       "node_modules/**/*"
     ],
     "publish": {

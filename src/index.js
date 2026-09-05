@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
 
@@ -33,6 +33,13 @@ db.serialize(() => {
       course_id TEXT,
       text TEXT NOT NULL,
       completed INTEGER DEFAULT 0
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT
     )
   `);
 
@@ -104,6 +111,56 @@ ipcMain.handle('update-course', async (event, { courseId, title, code }) => {
 });
 
 let mainWindow;
+let miniWidgetWindow = null;
+const MINI_WIDGET_SETTING_KEY = 'mini_widget_on_minimize';
+
+function getSettingValue(key) {
+  return new Promise((resolve, reject) => {
+    db.get('SELECT value FROM settings WHERE key = ?', [key], (err, row) => {
+      if (err) reject(err);
+      else resolve(row ? row.value : null);
+    });
+  });
+}
+
+function createMiniWidget() {
+  if (miniWidgetWindow) return miniWidgetWindow;
+
+  miniWidgetWindow = new BrowserWindow({
+    width: 240,
+    height: 84,
+    frame: false,
+    alwaysOnTop: true,
+    resizable: false,
+    movable: true,
+    skipTaskbar: true,
+    transparent: true,
+    backgroundColor: '#00000000',
+    webPreferences: {
+      preload: path.join(__dirname, 'mini-preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true
+    }
+  });
+
+  miniWidgetWindow.setAlwaysOnTop(true, 'screen-saver');
+
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+  miniWidgetWindow.setPosition(width - 260, height - 110);
+
+  miniWidgetWindow.loadFile(path.join(__dirname, 'mini-widget.html'));
+
+  miniWidgetWindow.on('closed', () => { miniWidgetWindow = null; });
+
+  return miniWidgetWindow;
+}
+
+function destroyMiniWidget() {
+  if (miniWidgetWindow) {
+    miniWidgetWindow.close();
+    miniWidgetWindow = null;
+  }
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -120,7 +177,71 @@ function createWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
+
+  mainWindow.on('minimize', async () => {
+    try {
+      const enabled = await getSettingValue(MINI_WIDGET_SETTING_KEY);
+      if (enabled === 'true') {
+        createMiniWidget().show();
+      }
+    } catch (err) {
+      log.error('Failed to read mini widget setting: ' + err);
+    }
+  });
+
+  mainWindow.on('restore', () => destroyMiniWidget());
+  mainWindow.on('focus', () => destroyMiniWidget());
+  mainWindow.on('closed', () => destroyMiniWidget());
 }
+
+ipcMain.handle('get-setting', (event, key) => {
+  return getSettingValue(key);
+});
+
+ipcMain.handle('set-setting', (event, { key, value }) => {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT INTO settings (key, value) VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      [key, value],
+      (err) => {
+        if (err) reject(err);
+        else resolve({ success: true });
+      }
+    );
+  });
+});
+
+// Relays live timer state from the main window to the floating mini widget.
+// If the timer has stopped, close the widget rather than leaving a stale one on screen.
+ipcMain.on('timer-state-update', (event, data) => {
+  if (!data || data.isStudying === false) {
+    destroyMiniWidget();
+    return;
+  }
+  if (miniWidgetWindow) {
+    miniWidgetWindow.webContents.send('timer-state', data);
+  }
+});
+
+// The mini widget's own controls: click to restore, Stop to end the session.
+ipcMain.on('restore-main-window', () => {
+  if (mainWindow) {
+    mainWindow.show();
+    mainWindow.restore();
+    mainWindow.focus();
+  }
+  destroyMiniWidget();
+});
+
+ipcMain.on('stop-timer-from-widget', () => {
+  if (mainWindow) {
+    mainWindow.webContents.send('stop-timer-request');
+    mainWindow.show();
+    mainWindow.restore();
+    mainWindow.focus();
+  }
+});
 
 ipcMain.handle('get-courses', () => {
   return new Promise((resolve, reject) => {
@@ -221,11 +342,15 @@ ipcMain.handle('delete-task', (event, taskId) => {
     });
   });
 });
-
 ipcMain.handle('get-history', () => {
   return new Promise((resolve, reject) => {
     const query = `
-      SELECT s.id, c.title, c.code, s.duration, s.created_at 
+      SELECT 
+        s.id, 
+        c.title, 
+        c.code, 
+        s.duration, 
+        datetime(s.created_at, 'localtime') AS created_at 
       FROM study_sessions s 
       JOIN courses c ON s.course_id = c.id 
       ORDER BY s.created_at DESC LIMIT 50

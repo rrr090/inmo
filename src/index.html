@@ -23,6 +23,20 @@
       <div class="nav-link active" onclick="switchPage('timer-page', this)">⏱️ Focus Engine</div>
       <div class="nav-link" onclick="switchPage('analytics-page', this)">📊 Analytics & Charts</div>
       <div class="nav-link" onclick="switchPage('history-page', this)">📜 Session History</div>
+
+      <div class="setting-row">
+        <div class="setting-row-info">
+          <span class="setting-row-icon">🪟</span>
+          <div>
+            <div class="setting-row-title">Floating Timer</div>
+            <div class="setting-row-desc">Show when minimized</div>
+          </div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="mini-widget-toggle" onchange="window.toggleMiniWidgetSetting(this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
     </div>
 
     <div class="nav-card" style="flex: 1;">

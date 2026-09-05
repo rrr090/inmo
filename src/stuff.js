@@ -34,9 +34,44 @@ async function init() {
     updateMetricsDashboard();
     loadTasks();
     initTimerButton();
+    loadMiniWidgetSetting();
+    listenForWidgetStopRequests();
   } catch (err) {
     console.error('Initialization error:', err);
   }
+}
+
+async function loadMiniWidgetSetting() {
+  const checkbox = document.getElementById('mini-widget-toggle');
+  if (!checkbox || !window.api || typeof window.api.getSetting !== 'function') return;
+  try {
+    const value = await window.api.getSetting('mini_widget_on_minimize');
+    checkbox.checked = value === 'true';
+  } catch (err) {
+    console.error('Failed to load mini widget setting:', err);
+  }
+}
+
+async function toggleMiniWidgetSetting(checked) {
+  if (!window.api || typeof window.api.setSetting !== 'function') return;
+  try {
+    await window.api.setSetting('mini_widget_on_minimize', checked ? 'true' : 'false');
+  } catch (err) {
+    console.error('Failed to save mini widget setting:', err);
+  }
+}
+
+let widgetStopListenerAttached = false;
+function listenForWidgetStopRequests() {
+  if (widgetStopListenerAttached) return;
+  if (!window.api || typeof window.api.onStopTimerRequest !== 'function') return;
+
+  window.api.onStopTimerRequest(() => {
+    // Reuse the exact same stop logic as clicking the main play/pause button
+    const timerBtn = document.getElementById('timer-btn');
+    if (timerBtn && isStudying) timerBtn.click();
+  });
+  widgetStopListenerAttached = true;
 }
 
 function injectCustomScrollbarStyles() {
@@ -86,6 +121,52 @@ function injectCustomScrollbarStyles() {
       color: #000000 !important;
       font-weight: 700 !important;
       box-shadow: 0 0 10px rgba(16, 185, 129, 0.3) !important;
+    }
+
+    /* Плавающий мини-таймер, виден на других вкладках, пока идёт сессия */
+    .mini-timer-widget {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 999;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      background: var(--bg-card, #181820);
+      border: 1px solid var(--accent, #10b981);
+      border-radius: 999px;
+      box-shadow: 0 4px 20px rgba(16, 185, 129, 0.25);
+      cursor: pointer;
+      color: var(--text-main, #f3f4f6);
+      transition: transform 0.15s ease;
+    }
+    .mini-timer-widget:hover { transform: scale(1.05); }
+    .mini-timer-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent, #10b981);
+      box-shadow: 0 0 8px var(--accent, #10b981);
+      animation: mini-timer-pulse 1.2s infinite ease-in-out;
+      flex-shrink: 0;
+    }
+    @keyframes mini-timer-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+    .mini-timer-time {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: -0.5px;
+    }
+    .mini-timer-course {
+      font-size: 11px;
+      color: var(--text-sub, #9ca3af);
+      font-weight: 600;
+      white-space: nowrap;
+      max-width: 140px;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
   `;
   document.head.appendChild(style);
@@ -259,7 +340,7 @@ async function stopActiveTimer() {
   }
 
   secondsElapsed = timerMode === 'stopwatch' ? 0 : 25 * 60;
-  updateTimerDisplay();
+  updateAllTimerDisplays();
 
   const timerBtn = document.getElementById('timer-btn');
   const playIcon = document.getElementById('play-icon');
@@ -306,8 +387,6 @@ function formatHM(totalSecs) {
 // 3. НАВИГАЦИЯ И ДЭШБОРД
 // ==========================================
 async function switchPage(pageId, element) {
-  stopActiveTimer(); 
-  
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-link').forEach(n => n.classList.remove('active'));
   
@@ -321,6 +400,8 @@ async function switchPage(pageId, element) {
     await renderTrendChart();
   }
   if (pageId === 'history-page') renderHistory();
+
+  updateMiniTimerWidget();
 }
 
 function updateMetricsDashboard() {
@@ -631,6 +712,7 @@ function initTimerButton() {
 
       timerBtn.classList.add('running');
       playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+      updateAllTimerDisplays();
 
       timerInterval = setInterval(() => {
         const now = Date.now();
@@ -647,6 +729,7 @@ function initTimerButton() {
             isStudying = false;
             timerBtn.classList.remove('running');
             playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+            updateAllTimerDisplays();
             window.api.saveSession(currentCourse.id, 25 * 60).then(() => {
               init();
               alert('Pomodoro session completed and saved!');
@@ -654,7 +737,7 @@ function initTimerButton() {
             return;
           }
         }
-        updateTimerDisplay();
+        updateAllTimerDisplays();
       }, 500);
 
     } else {
@@ -671,7 +754,7 @@ function initTimerButton() {
       }
       
       secondsElapsed = timerMode === 'stopwatch' ? 0 : 25 * 60;
-      updateTimerDisplay();
+      updateAllTimerDisplays();
     }
   };
 }
@@ -687,6 +770,62 @@ function updateTimerDisplay() {
   display.innerText = timerMode === 'stopwatch' 
     ? `${hrs}:${mins}:${secs}` 
     : `${mins}:${secs}`;
+}
+
+function updateMiniTimerWidget() {
+  const timerPage = document.getElementById('timer-page');
+  const onTimerPage = timerPage && timerPage.classList.contains('active');
+  let widget = document.getElementById('mini-timer-widget');
+
+  // Hide the mini widget on the Focus Engine page itself (the full timer is already visible there)
+  // or whenever no session is running.
+  if (!isStudying || onTimerPage) {
+    if (widget) widget.remove();
+    return;
+  }
+
+  const course = getActiveCourse();
+  const hrs = Math.floor(secondsElapsed / 3600).toString().padStart(2, '0');
+  const mins = Math.floor((secondsElapsed % 3600) / 60).toString().padStart(2, '0');
+  const secs = (secondsElapsed % 60).toString().padStart(2, '0');
+  const timeStr = timerMode === 'stopwatch' ? `${hrs}:${mins}:${secs}` : `${mins}:${secs}`;
+
+  if (!widget) {
+    widget = document.createElement('div');
+    widget.id = 'mini-timer-widget';
+    widget.className = 'mini-timer-widget';
+    widget.title = 'Click to return to the Focus Engine';
+    widget.onclick = () => window.switchToTimerPage();
+    document.body.appendChild(widget);
+  }
+
+  widget.innerHTML = `
+    <span class="mini-timer-dot"></span>
+    <span class="mini-timer-time">${timeStr}</span>
+    <span class="mini-timer-course">${course ? course.code : ''}</span>
+  `;
+}
+
+function updateAllTimerDisplays() {
+  updateTimerDisplay();
+  updateMiniTimerWidget();
+  sendTimerStateToMain();
+}
+
+function sendTimerStateToMain() {
+  if (!window.api || typeof window.api.sendTimerState !== 'function') return;
+
+  const course = getActiveCourse();
+  const hrs = Math.floor(secondsElapsed / 3600).toString().padStart(2, '0');
+  const mins = Math.floor((secondsElapsed % 3600) / 60).toString().padStart(2, '0');
+  const secs = (secondsElapsed % 60).toString().padStart(2, '0');
+  const timeStr = timerMode === 'stopwatch' ? `${hrs}:${mins}:${secs}` : `${mins}:${secs}`;
+
+  window.api.sendTimerState({
+    isStudying,
+    timeStr,
+    courseLabel: course ? `${course.code} — ${course.title}` : 'No active subject'
+  });
 }
 
 function openModal() { 
@@ -740,6 +879,7 @@ window.switchPage = switchPage;
 window.cancelCourseEdit = cancelCourseEdit;
 window.switchTab = switchTab;
 window.switchToTimerPage = switchToTimerPage;
+window.toggleMiniWidgetSetting = toggleMiniWidgetSetting;
 
 
 // ==========================================
