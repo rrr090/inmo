@@ -24,10 +24,15 @@
       "output": "dist"
     },
     "win": {
-      "target": [
-        "nsis"
-      ],
+      "icon": "assets/icon.ico",
+      "target": ["nsis", "portable"],
       "artifactName": "${productName}.Setup.${version}.${ext}"
+    },
+    "mac": {
+       "icon": "assets/icon.icns"
+    },
+    "linux": {
+       "icon": "assets/icon.png"
     },
     "asarUnpack": [
       "node_modules/sqlite3/**/*"
@@ -39,7 +44,7 @@
       "src/stuff.js",
       "src/index.css",
       "package.json",
-      "src/miniwidget.html",
+      "assets/*",
       "src/minipreload.js",
       "node_modules/**/*"
     ],
