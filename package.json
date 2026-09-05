@@ -25,28 +25,23 @@
     },
     "win": {
       "icon": "assets/icon.ico",
-      "target": ["nsis", "portable"],
+      "target": ["nsis"],
       "artifactName": "${productName}.Setup.${version}.${ext}"
     },
-    "mac": {
-       "icon": "assets/icon.icns"
-    },
-    "linux": {
-       "icon": "assets/icon.png"
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "inmo"
     },
     "asarUnpack": [
       "node_modules/sqlite3/**/*"
     ],
-     "files": [
-      "src/index.js",
-      "src/preload.js",
-      "src/index.html",
-      "src/stuff.js",
-      "src/index.css",
-      "src/mini-preload.js",
-      "src/mini-widget.html",
+    "files": [
+      "src/**/*",
+      "assets/**/*",
       "package.json",
-      "assets/*",
       "node_modules/**/*"
     ],
     "publish": {
