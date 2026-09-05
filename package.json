@@ -37,15 +37,16 @@
     "asarUnpack": [
       "node_modules/sqlite3/**/*"
     ],
-    "files": [
+     "files": [
       "src/index.js",
       "src/preload.js",
       "src/index.html",
       "src/stuff.js",
       "src/index.css",
+      "src/mini-preload.js",
+      "src/mini-widget.html",
       "package.json",
       "assets/*",
-      "src/minipreload.js",
       "node_modules/**/*"
     ],
     "publish": {

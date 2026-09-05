@@ -342,6 +342,7 @@ ipcMain.handle('delete-task', (event, taskId) => {
     });
   });
 });
+
 ipcMain.handle('get-history', () => {
   return new Promise((resolve, reject) => {
     const query = `
