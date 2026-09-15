@@ -21,5 +21,10 @@ contextBridge.exposeInMainWorld('api', {
   getSetting: (key) => ipcRenderer.invoke('get-setting', key),
   setSetting: (key, value) => ipcRenderer.invoke('set-setting', { key, value }),
   sendTimerState: (data) => ipcRenderer.send('timer-state-update', data),
-  onStopTimerRequest: (callback) => ipcRenderer.on('stop-timer-request', () => callback())
+  onStopTimerRequest: (callback) => ipcRenderer.on('stop-timer-request', () => callback()),
+ 
+  // Crash-safe session recovery
+  startActiveSession: (data) => ipcRenderer.invoke('start-active-session', data),
+  clearActiveSession: () => ipcRenderer.invoke('clear-active-session'),
+  recoverActiveSession: () => ipcRenderer.invoke('recover-active-session')
 });

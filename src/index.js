@@ -43,6 +43,17 @@ db.serialize(() => {
     )
   `);
 
+  // Holds the single in-progress session so it survives a crash/power loss.
+  // id is fixed to 1 so there is never more than one row.
+  db.run(`
+    CREATE TABLE IF NOT EXISTS active_session (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      course_id TEXT,
+      start_timestamp INTEGER,
+      mode TEXT
+    )
+  `);
+
   db.get('SELECT COUNT(*) as count FROM courses', (err, row) => {
     if (!err && row && row.count === 0) {
       const stmt = db.prepare('INSERT INTO courses (id, title, code) VALUES (?, ?, ?)');
@@ -198,6 +209,89 @@ ipcMain.handle('get-setting', (event, key) => {
   return getSettingValue(key);
 });
 
+// --- Crash-safe active session tracking ---
+
+ipcMain.handle('start-active-session', (event, { courseId, startTimestamp, mode }) => {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT INTO active_session (id, course_id, start_timestamp, mode) VALUES (1, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET course_id = excluded.course_id,
+                                     start_timestamp = excluded.start_timestamp,
+                                     mode = excluded.mode`,
+      [courseId, startTimestamp, mode],
+      (err) => {
+        if (err) reject(err);
+        else resolve({ success: true });
+      }
+    );
+  });
+});
+
+ipcMain.handle('clear-active-session', () => {
+  return new Promise((resolve, reject) => {
+    db.run('DELETE FROM active_session WHERE id = 1', (err) => {
+      if (err) reject(err);
+      else resolve({ success: true });
+    });
+  });
+});
+
+// Called on startup: if a session was left open by a crash, close it out using
+// elapsed wall-clock time and write it to study_sessions.
+ipcMain.handle('recover-active-session', () => {
+  return new Promise((resolve, reject) => {
+    db.get('SELECT course_id, start_timestamp, mode FROM active_session WHERE id = 1', [], (err, row) => {
+      if (err) return reject(err);
+      if (!row || !row.course_id || !row.start_timestamp) {
+        return resolve({ recovered: false });
+      }
+
+      let duration = Math.floor((Date.now() - row.start_timestamp) / 1000);
+
+      // A pomodoro can never legitimately exceed 25 minutes of credited time.
+      if (row.mode === 'pomodoro') {
+        duration = Math.min(duration, 25 * 60);
+      }
+
+      // Guard against nonsense values (clock changes, absurdly long gaps).
+      const MAX_REASONABLE = 12 * 60 * 60; // 12 hours
+      if (duration < 30 || duration > MAX_REASONABLE) {
+        db.run('DELETE FROM active_session WHERE id = 1', () => {
+          resolve({ recovered: false, discarded: true, duration });
+        });
+        return;
+      }
+
+      db.get('SELECT title, code FROM courses WHERE id = ?', [row.course_id], (courseErr, course) => {
+        if (courseErr) return reject(courseErr);
+        if (!course) {
+          // Course was deleted while the session was open - drop the orphan.
+          db.run('DELETE FROM active_session WHERE id = 1', () => {
+            resolve({ recovered: false, discarded: true });
+          });
+          return;
+        }
+
+        db.run('INSERT INTO study_sessions (course_id, duration) VALUES (?, ?)', [row.course_id, duration], (insErr) => {
+          if (insErr) return reject(insErr);
+          db.run('UPDATE courses SET total_seconds = total_seconds + ? WHERE id = ?', [duration, row.course_id], (updErr) => {
+            if (updErr) return reject(updErr);
+            db.run('DELETE FROM active_session WHERE id = 1', (delErr) => {
+              if (delErr) return reject(delErr);
+              resolve({
+                recovered: true,
+                duration,
+                courseTitle: course.title,
+                courseCode: course.code
+              });
+            });
+          });
+        });
+      });
+    });
+  });
+});
+
 ipcMain.handle('set-setting', (event, { key, value }) => {
   return new Promise((resolve, reject) => {
     db.run(
@@ -346,12 +440,7 @@ ipcMain.handle('delete-task', (event, taskId) => {
 ipcMain.handle('get-history', () => {
   return new Promise((resolve, reject) => {
     const query = `
-      SELECT 
-        s.id, 
-        c.title, 
-        c.code, 
-        s.duration, 
-        datetime(s.created_at, 'localtime') AS created_at 
+      SELECT s.id, c.title, c.code, s.duration, s.created_at 
       FROM study_sessions s 
       JOIN courses c ON s.course_id = c.id 
       ORDER BY s.created_at DESC LIMIT 50

@@ -22,6 +22,8 @@ async function init() {
   try {
     injectCustomScrollbarStyles();
 
+    await recoverCrashedSession();
+
     courses = await window.api.getCourses();
     dailyStats = await window.api.getDailyStats();
       
@@ -38,6 +40,32 @@ async function init() {
     listenForWidgetStopRequests();
   } catch (err) {
     console.error('Initialization error:', err);
+  }
+}
+
+let crashRecoveryChecked = false;
+async function recoverCrashedSession() {
+  // init() runs again after saving sessions, so only check on the first launch pass.
+  if (crashRecoveryChecked) return;
+  crashRecoveryChecked = true;
+
+  if (!window.api || typeof window.api.recoverActiveSession !== 'function') return;
+
+  try {
+    const result = await window.api.recoverActiveSession();
+    if (result && result.recovered) {
+      const mins = Math.floor(result.duration / 60);
+      const secs = result.duration % 60;
+      const timeStr = mins > 0 ? `${mins} min ${secs} sec` : `${secs} sec`;
+      alert(
+        `Recovered an unfinished session.\n\n` +
+        `${result.courseCode} — ${result.courseTitle}\n` +
+        `Time restored: ${timeStr}\n\n` +
+        `The app closed unexpectedly while this session was running.`
+      );
+    }
+  } catch (err) {
+    console.error('Failed to recover crashed session:', err);
   }
 }
 
@@ -320,6 +348,10 @@ async function stopActiveTimer() {
 
     const currentCourse = getActiveCourse();
     let durationToSave = timerMode === 'stopwatch' ? secondsElapsed : (25 * 60 - secondsElapsed);
+
+    if (window.api.clearActiveSession) {
+      await window.api.clearActiveSession().catch(err => console.error('Failed to clear active session:', err));
+    }
 
     if (currentCourse && durationToSave > 30) {
       try {
@@ -714,6 +746,15 @@ function initTimerButton() {
       playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
       updateAllTimerDisplays();
 
+      // Record the in-progress session immediately so a crash/power loss can't lose it.
+      if (window.api.startActiveSession) {
+        window.api.startActiveSession({
+          courseId: currentCourse.id,
+          startTimestamp: startTime,
+          mode: timerMode
+        }).catch(err => console.error('Failed to persist active session:', err));
+      }
+
       timerInterval = setInterval(() => {
         const now = Date.now();
         const diffSeconds = Math.floor((now - startTime) / 1000);
@@ -730,6 +771,7 @@ function initTimerButton() {
             timerBtn.classList.remove('running');
             playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
             updateAllTimerDisplays();
+            if (window.api.clearActiveSession) window.api.clearActiveSession();
             window.api.saveSession(currentCourse.id, 25 * 60).then(() => {
               init();
               alert('Pomodoro session completed and saved!');
@@ -748,6 +790,10 @@ function initTimerButton() {
 
       let durationToSave = timerMode === 'stopwatch' ? secondsElapsed : (25 * 60 - secondsElapsed);
       
+      if (window.api.clearActiveSession) {
+        await window.api.clearActiveSession().catch(err => console.error('Failed to clear active session:', err));
+      }
+
       if (durationToSave > 30) {
         await window.api.saveSession(currentCourse.id, durationToSave);
         init();
