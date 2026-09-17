@@ -442,7 +442,7 @@ ipcMain.handle('delete-task', (event, taskId) => {
 ipcMain.handle('get-history', () => {
   return new Promise((resolve, reject) => {
     const query = `
-      SELECT s.id, c.title, c.code, s.duration, s.created_at 
+      SELECT s.id, c.title, c.code, s.duration, strftime('%d.%m.%Y, %H:%M', s.created_at, 'localtime') AS created_at
       FROM study_sessions s 
       JOIN courses c ON s.course_id = c.id 
       ORDER BY s.created_at DESC LIMIT 50
