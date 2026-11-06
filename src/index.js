@@ -178,6 +178,9 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1300,
     height: 860,
+    // Smallest size that keeps the timer header and history rows on one line.
+    minWidth: 1000,
+    minHeight: 680,
     backgroundColor: '#0a0a0c', // Фикс белой вспышки при открытии/сворачивании
     titleBarStyle: 'hiddenInset',
     autoHideMenuBar: true,
