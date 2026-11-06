@@ -472,9 +472,9 @@ ipcMain.handle('delete-session', (event, sessionId) => {
 ipcMain.handle('get-daily-stats', () => {
   return new Promise((resolve, reject) => {
     const query = `
-      SELECT DATE(created_at) as date, SUM(duration) as total_seconds 
-      FROM study_sessions 
-      GROUP BY DATE(created_at) 
+      SELECT DATE(created_at, 'localtime') as date, SUM(duration) as total_seconds
+      FROM study_sessions
+      GROUP BY DATE(created_at, 'localtime')
       ORDER BY date DESC
     `;
     db.all(query, [], (err, rows) => {
@@ -487,20 +487,23 @@ ipcMain.handle('get-daily-stats', () => {
 ipcMain.handle('get-analytics-breakdown', () => {
   return new Promise((resolve, reject) => {
     const trendQuery = `
-      SELECT DATE(created_at) as date, SUM(duration) as total_seconds 
-      FROM study_sessions 
-      WHERE created_at >= datetime('now', '-7 days')
-      GROUP BY DATE(created_at) 
+      SELECT DATE(created_at, 'localtime') as date, SUM(duration) as total_seconds
+      FROM study_sessions
+      WHERE DATE(created_at, 'localtime') >= DATE('now', 'localtime', '-6 days')
+      GROUP BY DATE(created_at, 'localtime')
       ORDER BY date ASC
     `;
     
     db.all(trendQuery, [], (err, trendRows) => {
       if (err) return reject(err);
 
+      // Whole local calendar days: current_week is exactly the 7 days on the trend
+      // chart, previous_week the 7 before. Rolling "now - 7 days" windows made the
+      // percentage drift with the time of day as sessions crossed the boundary.
       const comparisonQuery = `
-        SELECT 
-          SUM(CASE WHEN created_at >= datetime('now', '-7 days') THEN duration ELSE 0 END) as current_week,
-          SUM(CASE WHEN created_at >= datetime('now', '-14 days') AND created_at < datetime('now', '-7 days') THEN duration ELSE 0 END) as previous_week
+        SELECT
+          SUM(CASE WHEN DATE(created_at, 'localtime') >= DATE('now', 'localtime', '-6 days') THEN duration ELSE 0 END) as current_week,
+          SUM(CASE WHEN DATE(created_at, 'localtime') >= DATE('now', 'localtime', '-13 days') AND DATE(created_at, 'localtime') < DATE('now', 'localtime', '-6 days') THEN duration ELSE 0 END) as previous_week
         FROM study_sessions
       `;
 

@@ -436,8 +436,16 @@ async function switchPage(pageId, element) {
   updateMiniTimerWidget();
 }
 
+// YYYY-MM-DD in the user's timezone, matching DATE(created_at, 'localtime') in the
+// main process. toISOString() would give the UTC date, a day off for part of each day.
+function localDateKey(date) {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
 function updateMetricsDashboard() {
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = localDateKey(new Date());
   const todayRecord = dailyStats.find(d => d.date === todayStr);
   const todaySeconds = todayRecord ? todayRecord.total_seconds : 0;
   const targetSeconds = 7200; 
@@ -453,7 +461,7 @@ function updateMetricsDashboard() {
   let streak = 0;
   let d = new Date();
   while (true) {
-    const ds = d.toISOString().split('T')[0];
+    const ds = localDateKey(d);
     const found = dailyStats.find(item => item.date === ds);
     if (found && found.total_seconds > 0) {
       streak++;
@@ -509,7 +517,7 @@ async function renderTrendChart() {
   for (let i = 6; i >= 0; i--) {
     const targetDate = new Date();
     targetDate.setDate(targetDate.getDate() - i);
-    const ds = targetDate.toISOString().split('T')[0];
+    const ds = localDateKey(targetDate);
     labels.push(targetDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }));
     
     const found = trend.find(t => t.date === ds);
@@ -533,7 +541,9 @@ async function renderTrendChart() {
         backgroundColor: 'rgba(16, 185, 129, 0.1)',
         borderWidth: 3,
         fill: true,
-        tension: 0.35,
+        // Monotone never overshoots, so the curve can't imply more hours than any
+        // day actually had (or dip under zero) around a big spike.
+        cubicInterpolationMode: 'monotone',
         pointBackgroundColor: '#10b981',
         pointRadius: 4
       }]
@@ -558,7 +568,7 @@ function renderHeatmap() {
   for (let i = 89; i >= 0; i--) {
     const targetDate = new Date();
     targetDate.setDate(targetDate.getDate() - i);
-    const ds = targetDate.toISOString().split('T')[0];
+    const ds = localDateKey(targetDate);
     const record = dailyStats.find(item => item.date === ds);
     const secs = record ? record.total_seconds : 0;
     
@@ -566,10 +576,11 @@ function renderHeatmap() {
     dayDiv.className = 'heatmap-day';
     dayDiv.title = `${ds}: ${Math.round(secs / 60)} mins studied`;
     
-    if (secs > 0 && secs < 1800) dayDiv.classList.add('l1');
-    else if (secs >= 1800 && secs < 3600) dayDiv.classList.add('l2');
-    else if (secs >= 3600 && secs < 7200) dayDiv.classList.add('l3');
-    else if (secs >= 7200) dayDiv.classList.add('l4');
+    // Under 1h / 1-3h / 3-6h / 6h+, so long days stand out from a typical 2-5h day.
+    if (secs > 0 && secs < 3600) dayDiv.classList.add('l1');
+    else if (secs >= 3600 && secs < 10800) dayDiv.classList.add('l2');
+    else if (secs >= 10800 && secs < 21600) dayDiv.classList.add('l3');
+    else if (secs >= 21600) dayDiv.classList.add('l4');
     
     grid.appendChild(dayDiv);
   }
