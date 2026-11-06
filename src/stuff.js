@@ -1,3 +1,6 @@
+import { icon, renderIcons } from './icons.js';
+import { showToast, confirmDialog, desktopNotify } from './notify.js';
+
 // ==========================================
 // 1. СОСТОЯНИЕ ПРИЛОЖЕНИЯ
 // ==========================================
@@ -14,6 +17,9 @@ let timerMode = 'stopwatch';
 
 let currentTimerInterval = null;
 
+// How often a running session reports it's alive. A crash loses at most this much time.
+const HEARTBEAT_INTERVAL_MS = 30 * 1000;
+
 
 // ==========================================
 // 2. ИНИЦИАЛИЗАЦИЯ И УПРАВЛЕНИЕ КУРСАМИ
@@ -21,6 +27,7 @@ let currentTimerInterval = null;
 async function init() {
   try {
     injectCustomScrollbarStyles();
+    renderIcons();
 
     await recoverCrashedSession();
 
@@ -31,6 +38,7 @@ async function init() {
       activeCourseId = courses[0].id;
     }
 
+    renderFirstRun();
     renderCourses();
     renderTimerCourseSelect();
     updateMetricsDashboard();
@@ -54,15 +62,11 @@ async function recoverCrashedSession() {
   try {
     const result = await window.api.recoverActiveSession();
     if (result && result.recovered) {
-      const mins = Math.floor(result.duration / 60);
-      const secs = result.duration % 60;
-      const timeStr = mins > 0 ? `${mins} min ${secs} sec` : `${secs} sec`;
-      alert(
-        `Recovered an unfinished session.\n\n` +
-        `${result.courseCode} — ${result.courseTitle}\n` +
-        `Time restored: ${timeStr}\n\n` +
-        `The app closed unexpectedly while this session was running.`
-      );
+      showToast('Recovered an unfinished session', {
+        message: `${formatDuration(result.duration)} restored to ${result.courseCode} — ${result.courseTitle}`,
+        type: 'info',
+        duration: 10000
+      });
     }
   } catch (err) {
     console.error('Failed to recover crashed session:', err);
@@ -204,11 +208,32 @@ function getActiveCourse() {
   return courses.find(c => c.id === activeCourseId) || courses[0] || null;
 }
 
+function emptyState(iconName, title, text) {
+  return `
+    <div class="empty-state">
+      ${icon(iconName, 22)}
+      <div class="empty-state-title">${title}</div>
+      <div class="empty-state-text">${text}</div>
+    </div>
+  `;
+}
+
+function renderFirstRun() {
+  const noSubjects = courses.length === 0;
+  document.getElementById('first-run').classList.toggle('is-hidden', !noSubjects);
+  document.getElementById('focus-content').classList.toggle('is-hidden', noSubjects);
+}
+
 function renderCourses() {
   const list = document.getElementById('course-list');
   if (!list) return;
   list.innerHTML = '';
-  
+
+  if (courses.length === 0) {
+    list.innerHTML = emptyState('book-open', 'No subjects yet', 'Add one with the + button.');
+    return;
+  }
+
   courses.forEach(course => {
     const item = document.createElement('div');
     item.className = `course-item ${activeCourseId === course.id ? 'active' : ''}`;
@@ -234,9 +259,9 @@ function renderCourses() {
             • ${formatHM(course.total_seconds)}
           </div>
         </div>
-        <div style="display: flex; gap: 4px; align-items: center; flex-shrink: 0;">
-          <button style="background: transparent; border: none; color: #94a3b8; padding: 2px 4px; border-radius: 4px; cursor: pointer; font-size: 11px; opacity: 0.5; transition: opacity 0.2s, color 0.2s;" onmouseover="this.style.opacity='1'; this.style.color='#ffffff'" onmouseout="this.style.opacity='0.5'; this.style.color='#94a3b8'" onclick="event.stopPropagation(); window.enableCourseEdit('${course.id}')" title="Edit Course">Edit</button>
-          <button class="delete-course-btn" title="Delete Course" onclick="event.stopPropagation(); window.handleDeleteCourse('${course.id}')" style="background: transparent; border: none; color: #ef4444; cursor: pointer; font-size: 16px; padding: 0 4px; opacity: 0.7;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">×</button>
+        <div class="course-actions">
+          <button class="icon-btn" title="Edit Subject" aria-label="Edit Subject" onclick="event.stopPropagation(); window.enableCourseEdit('${course.id}')">${icon('pencil', 14)}</button>
+          <button class="icon-btn danger" title="Delete Subject" aria-label="Delete Subject" onclick="event.stopPropagation(); window.handleDeleteCourse('${course.id}')">${icon('x', 14)}</button>
         </div>
       `;
     }
@@ -274,7 +299,7 @@ async function saveCourseInfo(courseId) {
   const newCode = codeInput.value.trim();
 
   if (!newTitle || !newCode) {
-    alert('Title and Code cannot be empty!');
+    showToast('Title and code are both required', { type: 'error' });
     return;
   }
 
@@ -283,7 +308,7 @@ async function saveCourseInfo(courseId) {
       // Preload doesn't expose an update-course bridge yet - fail loudly instead of
       // silently reloading the old, unchanged data.
       console.error('saveCourseInfo: window.api.updateCourse is not available. Add it to preload.js and an "update-course" IPC handler in main.js.');
-      alert('Could not save changes: the app is missing the update-course function. See console for details.');
+      showToast('Could not save changes', { message: 'The app is missing the update-course function.', type: 'error' });
       return;
     }
 
@@ -295,7 +320,7 @@ async function saveCourseInfo(courseId) {
     if (saved && (saved.title !== newTitle || saved.code !== newCode)) {
       // The API call resolved but the refetched data doesn't match what we tried to save.
       console.warn('saveCourseInfo: data after refetch does not match what was saved', { expected: { newTitle, newCode }, got: saved });
-      alert('Warning: the save may not have persisted correctly. Please double-check the course info.');
+      showToast('The save may not have worked', { message: 'Please double-check this subject\'s details.', type: 'error' });
     }
 
     courses.forEach(c => c.isEditing = false);
@@ -304,7 +329,7 @@ async function saveCourseInfo(courseId) {
     loadTasks();
   } catch (err) {
     console.error('Failed to update course info:', err);
-    alert(`Failed to save changes: ${err.message || err}`);
+    showToast('Could not save changes', { message: String(err.message || err), type: 'error' });
   }
 }
 
@@ -360,9 +385,13 @@ async function stopActiveTimer() {
         courses = await window.api.getCourses();
         renderCourses();
         updateMetricsDashboard();
+        showSessionSaved(currentCourse, durationToSave);
       } catch (err) {
         console.error('Error saving session on timer stop:', err);
+        showToast('Could not save your session', { message: String(err.message || err), type: 'error' });
       }
+    } else {
+      showSessionTooShort();
     }
   }
 
@@ -412,6 +441,21 @@ function formatHM(totalSecs) {
   const hrs = Math.floor(totalSecs / 3600);
   const mins = Math.floor((totalSecs % 3600) / 60);
   return `${hrs}h ${mins}m`;
+}
+
+// For messages, where "0h 0m" would read as if nothing was saved.
+function formatDuration(totalSecs) {
+  if (totalSecs < 60) return `${totalSecs} sec`;
+  if (totalSecs < 3600) return `${Math.floor(totalSecs / 60)} min`;
+  return formatHM(totalSecs);
+}
+
+function showSessionSaved(course, seconds) {
+  showToast('Session saved', { message: `${formatDuration(seconds)} added to ${course.code} — ${course.title}` });
+}
+
+function showSessionTooShort() {
+  showToast('Session not saved', { message: 'Sessions of 30 seconds or less aren\'t logged.', type: 'info' });
 }
 
 
@@ -476,9 +520,10 @@ function updateMetricsDashboard() {
   }
   
   const streakVal = document.getElementById('current-streak-val');
-  const streakBadge = document.getElementById('streak-days-badge');
-  if (streakVal) streakVal.innerText = `${streak} Days in a row`;
-  if (streakBadge) streakBadge.innerText = `${streak} day streak`;
+  if (streakVal) {
+    if (streak === 0) streakVal.innerText = 'No streak yet';
+    else streakVal.innerText = `${streak} ${streak === 1 ? 'day' : 'days'} in a row`;
+  }
 }
 
 
@@ -524,6 +569,9 @@ async function renderTrendChart() {
     const hours = found ? (found.total_seconds / 3600).toFixed(1) : 0;
     dataPoints.push(hours);
   }
+
+  const noRecentStudy = dataPoints.every(hours => Number(hours) === 0);
+  document.getElementById('trend-empty').classList.toggle('is-hidden', !noRecentStudy);
 
   const canvas = document.getElementById('focusTrendChart');
   if (!canvas) return;
@@ -590,7 +638,12 @@ function renderAnalytics() {
   const container = document.getElementById('analytics-list');
   if (!container) return;
   container.innerHTML = '';
-  
+
+  if (courses.length === 0) {
+    container.innerHTML = emptyState('chart-column', 'Nothing to show yet', 'Time per subject appears here once you add one.');
+    return;
+  }
+
   courses.forEach(c => {
     const card = document.createElement('div');
     card.className = 'stat-card';
@@ -608,7 +661,12 @@ async function renderHistory() {
   const tbody = document.getElementById('history-table-body');
   if (!tbody) return;
   tbody.innerHTML = '';
-  
+
+  if (history.length === 0) {
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="4">${emptyState('history', 'No sessions yet', 'Finished study sessions are listed here.')}</td></tr>`;
+    return;
+  }
+
   history.forEach(row => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -616,7 +674,7 @@ async function renderHistory() {
       <td><b>${row.code}</b> - ${row.title}</td>
       <td style="color: var(--accent); font-weight: 700;">${formatHM(row.duration)}</td>
       <td style="text-align: right;">
-        <button class="delete-item-btn" onclick="window.handleDeleteSession(${row.id})" title="Delete log">🗑️</button>
+        <button class="delete-item-btn" onclick="window.handleDeleteSession(${row.id})" title="Delete log" aria-label="Delete log">${icon('trash-2', 15)}</button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -648,7 +706,12 @@ async function loadTasks() {
   const container = document.getElementById('task-list');
   if (!container) return;
   container.innerHTML = '';
-  
+
+  if (tasks.length === 0) {
+    container.innerHTML = emptyState('list-todo', 'No tasks yet', 'Add your first one above.');
+    return;
+  }
+
   tasks.forEach(t => {
     const div = document.createElement('div');
     div.className = `task-item ${t.completed ? 'completed' : ''}`;
@@ -657,7 +720,7 @@ async function loadTasks() {
         <input type="checkbox" ${t.completed ? 'checked' : ''} onclick="event.stopPropagation(); window.handleToggleTask('${t.id}')">
         <span>${t.text}</span>
       </div>
-      <button class="delete-item-btn" onclick="window.handleDeleteTask('${t.id}')">🗑️</button>
+      <button class="delete-item-btn" onclick="window.handleDeleteTask('${t.id}')" title="Delete task" aria-label="Delete task">${icon('trash-2', 15)}</button>
     `;
     container.appendChild(div);
   });
@@ -690,13 +753,20 @@ async function handleDeleteTask(taskId) {
 // 6. УПРАВЛЕНИЕ КУРСАМИ (УДАЛЕНИЕ / СБРОС)
 // ==========================================
 async function handleDeleteCourse(courseId) {
-  if (confirm('Delete this course, its tasks, and history logs?')) {
+  const course = courses.find(c => c.id === courseId);
+  const confirmed = await confirmDialog({
+    title: `Delete ${course.title}?`,
+    message: 'Its tasks and all of its logged sessions will be deleted too. This can\'t be undone.',
+    confirmLabel: 'Delete Subject'
+  });
+  if (confirmed) {
     await window.api.deleteCourse(courseId);
     courses = await window.api.getCourses();
     if (activeCourseId === courseId) {
       activeCourseId = courses.length > 0 ? courses[0].id : null;
     }
     init();
+    showToast('Subject deleted', { message: course.title });
   }
 }
 
@@ -708,12 +778,29 @@ async function handleDeleteActiveCourse() {
 async function handleResetActiveCourse() {
   const currentCourse = getActiveCourse();
   if (!currentCourse) return;
-  if (confirm(`Reset all accumulated time for ${currentCourse.title}?`)) {
+  const confirmed = await confirmDialog({
+    title: `Reset time for ${currentCourse.title}?`,
+    message: 'All of its logged sessions will be deleted and its total will go back to 0h 0m. This can\'t be undone.',
+    confirmLabel: 'Reset Time'
+  });
+  if (confirmed) {
     await window.api.resetCourseTime(currentCourse.id);
     courses = await window.api.getCourses();
     dailyStats = await window.api.getDailyStats();
     init();
+    showToast('Time reset', { message: currentCourse.title });
   }
+}
+
+function closeSubjectMenu() {
+  document.getElementById('subject-menu').classList.add('is-hidden');
+  document.getElementById('subject-menu-btn').setAttribute('aria-expanded', 'false');
+}
+
+function toggleSubjectMenu(event) {
+  event.stopPropagation();
+  const isOpen = document.getElementById('subject-menu').classList.toggle('is-hidden') === false;
+  document.getElementById('subject-menu-btn').setAttribute('aria-expanded', String(isOpen));
 }
 
 
@@ -740,7 +827,7 @@ function initTimerButton() {
   timerBtn.onclick = async () => {
     const currentCourse = getActiveCourse();
     if (!currentCourse) {
-      alert('Please select or create a subject first!');
+      showToast('Add a subject first', { type: 'info' });
       return;
     }
 
@@ -766,9 +853,16 @@ function initTimerButton() {
         }).catch(err => console.error('Failed to persist active session:', err));
       }
 
+      let lastHeartbeat = Date.now();
+
       timerInterval = setInterval(() => {
         const now = Date.now();
         const diffSeconds = Math.floor((now - startTime) / 1000);
+
+        if (now - lastHeartbeat >= HEARTBEAT_INTERVAL_MS) {
+          lastHeartbeat = now;
+          window.api.heartbeatActiveSession().catch(err => console.error('Failed to record heartbeat:', err));
+        }
 
         if (timerMode === 'stopwatch') {
           secondsElapsed = diffSeconds;
@@ -785,7 +879,8 @@ function initTimerButton() {
             if (window.api.clearActiveSession) window.api.clearActiveSession();
             window.api.saveSession(currentCourse.id, 25 * 60).then(() => {
               init();
-              alert('Pomodoro session completed and saved!');
+              showToast('Pomodoro complete', { message: `25 min added to ${currentCourse.code} — ${currentCourse.title}` });
+              desktopNotify('Pomodoro complete', `25 min added to ${currentCourse.code}`);
             });
             return;
           }
@@ -808,6 +903,9 @@ function initTimerButton() {
       if (durationToSave > 30) {
         await window.api.saveSession(currentCourse.id, durationToSave);
         init();
+        showSessionSaved(currentCourse, durationToSave);
+      } else {
+        showSessionTooShort();
       }
       
       secondsElapsed = timerMode === 'stopwatch' ? 0 : 25 * 60;
@@ -887,7 +985,8 @@ function sendTimerStateToMain() {
 
 function openModal() { 
   const modal = document.getElementById('modal');
-  if (modal) modal.classList.add('open'); 
+  if (modal) modal.classList.add('open');
+  document.getElementById('modal-title').focus();
 }
 
 function closeModal() { 
@@ -902,16 +1001,32 @@ async function handleAddCourse() {
 
   const title = titleInput.value.trim();
   const code = codeInput.value.trim();
-  
-  if (title && code) {
-    const newC = await window.api.addCourse(title, code);
-    closeModal();
-    titleInput.value = '';
-    codeInput.value = '';
-    activeCourseId = newC.id;
-    init();
+
+  if (!title || !code) {
+    showToast('Title and code are both required', { type: 'error' });
+    return;
   }
+
+  const newC = await window.api.addCourse(title, code);
+  closeModal();
+  titleInput.value = '';
+  codeInput.value = '';
+  activeCourseId = newC.id;
+  init();
 }
+
+document.addEventListener('click', closeSubjectMenu);
+
+document.addEventListener('keydown', (event) => {
+  const addSubjectOpen = document.getElementById('modal').classList.contains('open');
+  if (event.key === 'Escape') {
+    closeSubjectMenu();
+    if (addSubjectOpen) closeModal();
+  }
+  if (event.key === 'Enter' && addSubjectOpen && event.target.tagName === 'INPUT') {
+    handleAddCourse();
+  }
+});
 
 
 // ==========================================
@@ -937,6 +1052,7 @@ window.cancelCourseEdit = cancelCourseEdit;
 window.switchTab = switchTab;
 window.switchToTimerPage = switchToTimerPage;
 window.toggleMiniWidgetSetting = toggleMiniWidgetSetting;
+window.toggleSubjectMenu = toggleSubjectMenu;
 
 
 // ==========================================

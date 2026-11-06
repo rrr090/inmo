@@ -18,7 +18,7 @@ A desktop study tracker for university courses. Time your study sessions per sub
 - **Session history:** your 50 most recent sessions, with the option to delete any of them.
 - **Floating timer:** an optional always-on-top widget that appears when you minimize the app, so you can see or stop the timer from anywhere.
 - **Crash recovery:** a running session is saved as soon as it starts, so a crash or power cut doesn't lose your time.
-- **Auto-updates:** installed copies update themselves from GitHub Releases.
+- **Auto-updates:** new versions download from GitHub Releases and install when you close the app.
 
 ## Install
 
@@ -52,8 +52,8 @@ npm run build
 
 The interface runs with `contextIsolation` on and `nodeIntegration` off, so it only reaches the database through the preload bridge.
 
-**Crash recovery:** when a session starts, its start time goes into a single-row `active_session` table, and the row is cleared when the session ends. If a row is still there at the next launch, the app credits the elapsed time to that subject. Pomodoro sessions are capped at 25 minutes, and anything under 30 seconds or over 12 hours is discarded as unreliable.
+**Crash recovery:** when a session starts, its start time goes into a single-row `active_session` table, and the row is cleared when the session ends. A running session also records a heartbeat every 30 seconds. If a row is still there at the next launch, the app credits the time up to the last heartbeat to that subject, so time spent with the app closed doesn't count. Pomodoro sessions are capped at 25 minutes, and anything under 30 seconds or over 12 hours is discarded as unreliable.
 
 ## Data and privacy
 
-Your study data lives in a local SQLite file in the app's user data folder. There are no accounts, and your data is never uploaded. The app does use the network for update checks, web fonts and the Chart.js library, so the trend chart needs a connection to load.
+Your study data lives in a local SQLite file in the app's user data folder. There are no accounts, and your data is never uploaded. The app only uses the network to check for updates, and everything else works offline.

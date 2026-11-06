@@ -9,6 +9,9 @@
     "build": "electron-builder"
   },
   "dependencies": {
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@fontsource/plus-jakarta-sans": "^5.3.0",
+    "chart.js": "^4.6.1",
     "electron-log": "^5.4.4",
     "electron-updater": "^6.8.9",
     "sqlite3": "^5.1.7"
@@ -25,7 +28,9 @@
     },
     "win": {
       "icon": "assets/icon.ico",
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "artifactName": "${productName}.Setup.${version}.${ext}"
     },
     "nsis": {

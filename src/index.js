@@ -54,19 +54,23 @@ db.serialize(() => {
     )
   `);
 
-  db.get('SELECT COUNT(*) as count FROM courses', (err, row) => {
-    if (!err && row && row.count === 0) {
-      const stmt = db.prepare('INSERT INTO courses (id, title, code) VALUES (?, ?, ?)');
-      stmt.run('1', 'Linear Algebra & Calculus', 'MATH1010');
-      stmt.run('2', 'Data Structures & Algorithms', 'CS1020');
-      stmt.run('3', 'Artificial Intelligence Systems', 'AI2001');
-      stmt.finalize();
+  // Added after 1.0.3, so existing databases need the column too.
+  // "duplicate column" just means this database already has it.
+  db.run('ALTER TABLE active_session ADD COLUMN last_heartbeat INTEGER', (err) => {
+    if (err && !/duplicate column/i.test(err.message)) {
+      log.error('Failed to add last_heartbeat column: ' + err);
     }
   });
+
 });
+
+// Windows only shows desktop notifications for an app with an ID. Matches build.appId.
+app.setAppUserModelId('com.inmo');
 
 autoUpdater.logger = log;
 autoUpdater.logger.transports.file.level = 'info';
+// Installs when the app closes, so an update never interrupts a running session.
+autoUpdater.autoInstallOnAppQuit = true;
 
 function sendStatusToWindow(text) {
   if (mainWindow) {
@@ -103,8 +107,7 @@ autoUpdater.on('download-progress', (progressObj) => {
 });
 
 autoUpdater.on('update-downloaded', (info) => {
-  log.info('Update downloaded.');
-  autoUpdater.quitAndInstall();
+  log.info('Update downloaded, will install on quit.');
 });
 
 // Updates a course's title and code in the database
@@ -219,16 +222,27 @@ ipcMain.handle('get-setting', (event, key) => {
 ipcMain.handle('start-active-session', (event, { courseId, startTimestamp, mode }) => {
   return new Promise((resolve, reject) => {
     db.run(
-      `INSERT INTO active_session (id, course_id, start_timestamp, mode) VALUES (1, ?, ?, ?)
+      `INSERT INTO active_session (id, course_id, start_timestamp, mode, last_heartbeat) VALUES (1, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET course_id = excluded.course_id,
                                      start_timestamp = excluded.start_timestamp,
-                                     mode = excluded.mode`,
-      [courseId, startTimestamp, mode],
+                                     mode = excluded.mode,
+                                     last_heartbeat = excluded.last_heartbeat`,
+      [courseId, startTimestamp, mode, Date.now()],
       (err) => {
         if (err) reject(err);
         else resolve({ success: true });
       }
     );
+  });
+});
+
+// Sent periodically while the timer runs, so recovery knows when the app was last alive.
+ipcMain.handle('heartbeat-active-session', () => {
+  return new Promise((resolve, reject) => {
+    db.run('UPDATE active_session SET last_heartbeat = ? WHERE id = 1', [Date.now()], (err) => {
+      if (err) reject(err);
+      else resolve({ success: true });
+    });
   });
 });
 
@@ -241,17 +255,20 @@ ipcMain.handle('clear-active-session', () => {
   });
 });
 
-// Called on startup: if a session was left open by a crash, close it out using
-// elapsed wall-clock time and write it to study_sessions.
+// Called on startup: if a session was left open by a crash, close it out at its
+// last heartbeat, so time spent with the app closed isn't credited, and write it
+// to study_sessions.
 ipcMain.handle('recover-active-session', () => {
   return new Promise((resolve, reject) => {
-    db.get('SELECT course_id, start_timestamp, mode FROM active_session WHERE id = 1', [], (err, row) => {
+    db.get('SELECT course_id, start_timestamp, mode, last_heartbeat FROM active_session WHERE id = 1', [], (err, row) => {
       if (err) return reject(err);
       if (!row || !row.course_id || !row.start_timestamp) {
         return resolve({ recovered: false });
       }
 
-      let duration = Math.floor((Date.now() - row.start_timestamp) / 1000);
+      // Sessions started before heartbeats existed have none to go on.
+      const endTimestamp = row.last_heartbeat || Date.now();
+      let duration = Math.floor((endTimestamp - row.start_timestamp) / 1000);
 
       // A pomodoro can never legitimately exceed 25 minutes of credited time.
       if (row.mode === 'pomodoro') {

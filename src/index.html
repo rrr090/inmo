@@ -4,11 +4,14 @@
   <meta charset="UTF-8">
   <title>INMO</title>
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link href="../node_modules/@fontsource/jetbrains-mono/700.css" rel="stylesheet">
+  <link href="../node_modules/@fontsource/jetbrains-mono/800.css" rel="stylesheet">
+  <link href="../node_modules/@fontsource/plus-jakarta-sans/500.css" rel="stylesheet">
+  <link href="../node_modules/@fontsource/plus-jakarta-sans/600.css" rel="stylesheet">
+  <link href="../node_modules/@fontsource/plus-jakarta-sans/700.css" rel="stylesheet">
+  <link href="../node_modules/@fontsource/plus-jakarta-sans/800.css" rel="stylesheet">
   <link href="index.css" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="../node_modules/chart.js/dist/chart.umd.min.js"></script>
 
 </head>
 <body>
@@ -17,16 +20,16 @@
   <div class="sidebar">
     <div class="nav-card">
       <div class="brand">
-        <div class="brand-icon">⚛</div>
+        <div class="brand-icon"><span data-icon="atom" data-size="18"></span></div>
         <span>INMO</span>
       </div>
-      <div class="nav-link active" onclick="switchPage('timer-page', this)">⏱️ Focus Engine</div>
-      <div class="nav-link" onclick="switchPage('analytics-page', this)">📊 Analytics & Charts</div>
-      <div class="nav-link" onclick="switchPage('history-page', this)">📜 Session History</div>
+      <div class="nav-link active" onclick="switchPage('timer-page', this)"><span data-icon="timer"></span>Focus Engine</div>
+      <div class="nav-link" onclick="switchPage('analytics-page', this)"><span data-icon="chart-column"></span>Analytics & Charts</div>
+      <div class="nav-link" onclick="switchPage('history-page', this)"><span data-icon="history"></span>Session History</div>
 
       <div class="setting-row">
         <div class="setting-row-info">
-          <span class="setting-row-icon">✳️</span>
+          <span class="setting-row-icon" data-icon="picture-in-picture-2"></span>
           <div>
             <div class="setting-row-title">Floating Timer</div>
             <div class="setting-row-desc">Show when minimized</div>
@@ -42,7 +45,7 @@
     <div class="nav-card" style="flex: 1; min-height: 0;">
       <div class="library-header">
         <span>SUBJECT LIBRARY</span>
-        <button class="add-btn" onclick="openModal()" title="Add Subject">+</button>
+        <button class="add-btn" onclick="openModal()" title="Add Subject" aria-label="Add Subject"><span data-icon="plus" data-size="14"></span></button>
       </div>
       <div id="course-list" style="display:flex; flex-direction:column; gap:4px; overflow-y:auto; flex:1; min-height:0;"></div>
     </div>
@@ -53,17 +56,24 @@
     
     <!-- PAGE 1: TIMER & TASKS -->
     <div id="timer-page" class="page active">
+      <div class="section-box first-run is-hidden" id="first-run">
+        <div class="first-run-icon"><span data-icon="book-open" data-size="28"></span></div>
+        <h2>Welcome to inmo</h2>
+        <p>Add your first subject to start tracking your study time.</p>
+        <button class="btn-primary" onclick="openModal()">Add Subject</button>
+      </div>
+
+      <div class="page-stack" id="focus-content">
       <div class="dashboard-metrics">
         <div class="metric-card">
           <div class="metric-header">
-            <span>🔥 STUDY STREAK</span>
-            <span id="streak-days-badge" style="color: var(--accent); font-weight: 700;">0 days</span>
+            <span class="label-with-icon"><span data-icon="flame" data-size="14"></span>STUDY STREAK</span>
           </div>
-          <div class="metric-value" id="current-streak-val">0 Days in a row</div>
+          <div class="metric-value" id="current-streak-val">No streak yet</div>
         </div>
         <div class="metric-card">
           <div class="metric-header">
-            <span>🎯 DAILY GOAL (2H TARGET)</span>
+            <span class="label-with-icon"><span data-icon="target" data-size="14"></span>DAILY GOAL (2H TARGET)</span>
             <span id="daily-progress-text">0m / 120m</span>
           </div>
           <div class="progress-bar-bg">
@@ -94,9 +104,12 @@
       <div class="section-box" id="active-course-todos-box">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
           <h3 id="tasks-header-title" style="margin: 0;">To-Do List</h3>
-          <div style="display: flex; gap: 8px;">
-            <button class="btn-secondary" style="font-size: 11px; padding: 4px 8px; border: 1px solid var(--border-color); border-radius: 6px;" onclick="handleResetActiveCourse()">Reset Time</button>
-            <button class="btn-secondary" style="font-size: 11px; padding: 4px 8px; border: 1px solid var(--border-color); border-radius: 6px; color: var(--danger);" onclick="handleDeleteActiveCourse()">Delete Subject</button>
+          <div class="menu-wrap">
+            <button class="icon-btn" id="subject-menu-btn" onclick="toggleSubjectMenu(event)" title="Subject options" aria-label="Subject options" aria-haspopup="menu" aria-expanded="false"><span data-icon="ellipsis"></span></button>
+            <div class="menu is-hidden" id="subject-menu" role="menu">
+              <button role="menuitem" onclick="handleResetActiveCourse()"><span data-icon="rotate-ccw" data-size="14"></span>Reset Time</button>
+              <button role="menuitem" class="danger" onclick="handleDeleteActiveCourse()"><span data-icon="trash-2" data-size="14"></span>Delete Subject</button>
+            </div>
           </div>
         </div>
         <div class="task-input-row">
@@ -104,6 +117,7 @@
           <button onclick="handleAddTask()">Add Task</button>
         </div>
         <div class="task-list" id="task-list"></div>
+      </div>
       </div>
     </div>
 
@@ -124,6 +138,7 @@
         <h3>7-Day Focus Trend (Hours)</h3>
         <div style="position: relative; height: 220px; width: 100%;">
           <canvas id="focusTrendChart"></canvas>
+          <div class="chart-empty is-hidden" id="trend-empty">No study time in the last 7 days</div>
         </div>
       </div>
 

@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('api', {
  
   // Crash-safe session recovery
   startActiveSession: (data) => ipcRenderer.invoke('start-active-session', data),
+  heartbeatActiveSession: () => ipcRenderer.invoke('heartbeat-active-session'),
   clearActiveSession: () => ipcRenderer.invoke('clear-active-session'),
   recoverActiveSession: () => ipcRenderer.invoke('recover-active-session')
 });
