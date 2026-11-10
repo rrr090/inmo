@@ -7,7 +7,7 @@ A desktop study tracker for university courses. Time your study sessions per sub
 ![Electron](https://img.shields.io/badge/Electron-2b2e3a?style=flat-square&logo=electron&logoColor=9feaf9)
 ![SQLite](https://img.shields.io/badge/SQLite-003b57?style=flat-square&logo=sqlite&logoColor=white)
 
-![inmo analytics page showing a 7-day focus trend, activity heatmap and time per subject](docs/screenshot.png)
+![inmo analytics page showing summary stats, a 7-day focus trend with average, goal and previous-week lines, and an activity heatmap](docs/screenshot.png)
 
 ## Features
 
