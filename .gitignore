@@ -91,3 +91,7 @@ typings/
 # Electron-Forge
 out/
 dist/
+
+# Tauri spike
+tauri-ui-dist/
+src-tauri/target/

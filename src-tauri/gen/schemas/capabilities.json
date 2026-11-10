@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"Main window and floating timer","local":true,"windows":["main","mini"],"permissions":["core:default","core:window:allow-start-dragging","notification:default"]}}

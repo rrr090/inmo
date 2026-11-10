@@ -1,0 +1,26 @@
+[package]
+name = "inmo"
+version = "1.0.5"
+description = "academic tracker"
+edition = "2021"
+
+[lib]
+name = "inmo_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+rusqlite = { version = "0.41.1", features = ["bundled"] }
+serde_json = "1.0.154"
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
