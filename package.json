@@ -2,7 +2,7 @@
   "name": "inmo",
   "description": "academic tracker",
   "author": "rrr090",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "main": "src/index.js",
   "scripts": {
     "start": "electron .",
