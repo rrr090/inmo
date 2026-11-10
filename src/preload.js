@@ -14,7 +14,10 @@ contextBridge.exposeInMainWorld('api', {
   getHistory: () => ipcRenderer.invoke('get-history'),
   deleteSession: (sessionId) => ipcRenderer.invoke('delete-session', sessionId),
   getDailyStats: () => ipcRenderer.invoke('get-daily-stats'),
-  getAnalyticsBreakdown: () => ipcRenderer.invoke('get-analytics-breakdown'),
+  getSessions: () => ipcRenderer.invoke('get-sessions'),
+  getTaskStats: () => ipcRenderer.invoke('get-task-stats'),
+  setCourseGoal: (courseId, seconds) => ipcRenderer.invoke('set-course-goal', { courseId, seconds }),
+  exportSessionsCsv: () => ipcRenderer.invoke('export-sessions-csv'),
   updateTaskCourse: (data) => ipcRenderer.invoke('update-task-course', data),
 
   // Mini widget (always-on-top timer when minimized)

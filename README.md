@@ -13,9 +13,9 @@ A desktop study tracker for university courses. Time your study sessions per sub
 
 - **Focus timer:** stopwatch or 25-minute Pomodoro, logged against the subject you pick.
 - **Subjects and tasks:** add, edit and remove courses, each with its own to-do list.
-- **Analytics:** 7-day focus trend, week-over-week comparison, a 90-day activity heatmap and total time per subject.
-- **Goals and streaks:** a daily 2-hour target and a running study streak.
-- **Session history:** your 50 most recent sessions, with the option to delete any of them.
+- **Analytics:** a 7/30/90-day focus trend (total or split by subject) with daily average, goal and previous-period lines, summary stats, week-over-week comparison, a 90-day activity heatmap, each subject's share of your time, weekday averages and a weekday × hour grid of when you study.
+- **Goals and streaks:** a daily 2-hour target, optional weekly goals per subject, a running study streak and your longest streak ever.
+- **Session history:** your 50 most recent sessions, with the option to delete any of them, and a CSV export of every session.
 - **Floating timer:** an optional always-on-top widget that appears when you minimize the app, so you can see or stop the timer from anywhere.
 - **Crash recovery:** a running session is saved as soon as it starts, so a crash or power cut doesn't lose your time.
 - **Auto-updates:** new versions download from GitHub Releases and install when you close the app.

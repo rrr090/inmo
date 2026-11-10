@@ -133,12 +133,27 @@
         </div>
       </div>
       
+      <div class="summary-tiles" id="summary-tiles"></div>
+
       <!-- Visual Chart.js Trend Card -->
       <div class="section-box">
-        <h3>7-Day Focus Trend (Hours)</h3>
-        <div style="position: relative; height: 220px; width: 100%;">
+        <div class="section-head">
+          <h3 id="trend-title">Focus Trend: Last 7 Days</h3>
+          <div class="chart-controls">
+            <div class="seg-group" role="group" aria-label="Chart view">
+              <button class="seg-btn active" data-trend-mode="total" onclick="setTrendMode('total')">Total</button>
+              <button class="seg-btn" data-trend-mode="subjects" onclick="setTrendMode('subjects')">By subject</button>
+            </div>
+            <div class="seg-group" role="group" aria-label="Date range">
+              <button class="seg-btn active" data-range="7" onclick="setTrendRange(7)">7D</button>
+              <button class="seg-btn" data-range="30" onclick="setTrendRange(30)">30D</button>
+              <button class="seg-btn" data-range="90" onclick="setTrendRange(90)">90D</button>
+            </div>
+          </div>
+        </div>
+        <div class="chart-wrap" style="height: 260px;">
           <canvas id="focusTrendChart"></canvas>
-          <div class="chart-empty is-hidden" id="trend-empty">No study time in the last 7 days</div>
+          <div class="chart-empty is-hidden" id="trend-empty">No study time in this period</div>
         </div>
       </div>
 
@@ -147,15 +162,45 @@
         <div class="heatmap-container" id="heatmap-grid"></div>
       </div>
 
-      <h3 style="margin: 0; font-size: 15px;">Accumulated Time Per Subject</h3>
+      <div class="analytics-two-col">
+        <div class="section-box">
+          <h3>Time by Subject</h3>
+          <p class="section-sub">Share of all study time</p>
+          <div id="subject-share"></div>
+        </div>
+        <div class="section-box">
+          <h3>Weekday Pattern</h3>
+          <p class="section-sub">Average hours on each day of the week</p>
+          <div class="chart-wrap" style="height: 200px;">
+            <canvas id="weekdayChart"></canvas>
+            <div class="chart-empty is-hidden" id="weekday-empty">No sessions yet</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-box">
+        <h3>When You Study</h3>
+        <p class="section-sub" id="hour-grid-caption">Total time by weekday and hour</p>
+        <div id="hour-grid"></div>
+        <div class="scale-legend is-hidden" id="hour-grid-legend" aria-hidden="true">
+          Less
+          <span class="hour-cell"></span><span class="hour-cell l1"></span><span class="hour-cell l2"></span><span class="hour-cell l3"></span><span class="hour-cell l4"></span>
+          More
+        </div>
+      </div>
+
+      <h3 style="margin: 0; font-size: 15px;">Subjects</h3>
       <div id="analytics-list" class="grid"></div>
     </div>
 
     <!-- PAGE 3: HISTORY -->
     <div id="history-page" class="page">
-      <div>
-        <h1 style="margin: 0 0 4px 0; font-size: 24px; font-weight: 800;">Session History</h1>
-        <p style="color: var(--text-sub); margin: 0; font-size: 13px;">Log of your recent completed focus sessions.</p>
+      <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+        <div>
+          <h1 style="margin: 0 0 4px 0; font-size: 24px; font-weight: 800;">Session History</h1>
+          <p style="color: var(--text-sub); margin: 0; font-size: 13px;">Log of your recent completed focus sessions.</p>
+        </div>
+        <button class="btn-outline" onclick="handleExportCsv()"><span data-icon="download" data-size="14"></span>Export CSV</button>
       </div>
       <div class="section-box" style="padding: 0; overflow: hidden;">
         <table class="history-table">

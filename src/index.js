@@ -1,7 +1,8 @@
-const { app, BrowserWindow, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, dialog } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
 
+const fs = require('fs');
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 
@@ -59,6 +60,13 @@ db.serialize(() => {
   db.run('ALTER TABLE active_session ADD COLUMN last_heartbeat INTEGER', (err) => {
     if (err && !/duplicate column/i.test(err.message)) {
       log.error('Failed to add last_heartbeat column: ' + err);
+    }
+  });
+
+  // Added in 1.0.5 for per-subject weekly goals. 0 means no goal set.
+  db.run('ALTER TABLE courses ADD COLUMN weekly_goal_seconds INTEGER DEFAULT 0', (err) => {
+    if (err && !/duplicate column/i.test(err.message)) {
+      log.error('Failed to add weekly_goal_seconds column: ' + err);
     }
   });
 
@@ -504,38 +512,87 @@ ipcMain.handle('get-daily-stats', () => {
   });
 });
 
-ipcMain.handle('get-analytics-breakdown', () => {
+// Every session as raw rows; the Analytics tab does its grouping in the renderer.
+// ended_at is Unix seconds (created_at is written when a session is saved, i.e. at its end),
+// so the renderer can turn it into local dates and hours with the user's timezone.
+ipcMain.handle('get-sessions', () => {
   return new Promise((resolve, reject) => {
-    const trendQuery = `
-      SELECT DATE(created_at, 'localtime') as date, SUM(duration) as total_seconds
+    const query = `
+      SELECT id, course_id, duration, CAST(strftime('%s', created_at) AS INTEGER) AS ended_at
       FROM study_sessions
-      WHERE DATE(created_at, 'localtime') >= DATE('now', 'localtime', '-6 days')
-      GROUP BY DATE(created_at, 'localtime')
-      ORDER BY date ASC
+      ORDER BY created_at ASC
     `;
-    
-    db.all(trendQuery, [], (err, trendRows) => {
-      if (err) return reject(err);
-
-      // Whole local calendar days: current_week is exactly the 7 days on the trend
-      // chart, previous_week the 7 before. Rolling "now - 7 days" windows made the
-      // percentage drift with the time of day as sessions crossed the boundary.
-      const comparisonQuery = `
-        SELECT
-          SUM(CASE WHEN DATE(created_at, 'localtime') >= DATE('now', 'localtime', '-6 days') THEN duration ELSE 0 END) as current_week,
-          SUM(CASE WHEN DATE(created_at, 'localtime') >= DATE('now', 'localtime', '-13 days') AND DATE(created_at, 'localtime') < DATE('now', 'localtime', '-6 days') THEN duration ELSE 0 END) as previous_week
-        FROM study_sessions
-      `;
-
-      db.get(comparisonQuery, [], (err2, compRow) => {
-        if (err2) return reject(err2);
-        resolve({
-          trend: trendRows || [],
-          comparison: compRow || { current_week: 0, previous_week: 0 }
-        });
-      });
+    db.all(query, [], (err, rows) => {
+      if (err) reject(err);
+      else resolve(rows || []);
     });
   });
+});
+
+ipcMain.handle('get-task-stats', () => {
+  return new Promise((resolve, reject) => {
+    const query = `
+      SELECT course_id, COUNT(*) AS total, SUM(CASE WHEN completed THEN 1 ELSE 0 END) AS done
+      FROM tasks
+      GROUP BY course_id
+    `;
+    db.all(query, [], (err, rows) => {
+      if (err) reject(err);
+      else resolve(rows || []);
+    });
+  });
+});
+
+ipcMain.handle('set-course-goal', (event, { courseId, seconds }) => {
+  return new Promise((resolve, reject) => {
+    const value = Math.max(0, Math.round(Number(seconds) || 0));
+    db.run('UPDATE courses SET weekly_goal_seconds = ? WHERE id = ?', [value, courseId], (err) => {
+      if (err) reject(err);
+      else resolve({ success: true });
+    });
+  });
+});
+
+function csvField(value) {
+  const text = value === null || value === undefined ? '' : String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+// Asks where to save, then writes every session as CSV. Resolves { canceled: true }
+// if the user closes the dialog.
+ipcMain.handle('export-sessions-csv', async () => {
+  const today = new Date();
+  const stamp = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+    title: 'Export sessions',
+    defaultPath: path.join(app.getPath('documents'), `inmo-sessions-${stamp}.csv`),
+    filters: [{ name: 'CSV', extensions: ['csv'] }]
+  });
+  if (canceled || !filePath) return { canceled: true };
+
+  const rows = await new Promise((resolve, reject) => {
+    const query = `
+      SELECT
+        strftime('%Y-%m-%d', s.created_at, 'localtime') AS date,
+        strftime('%H:%M', s.created_at, '-' || s.duration || ' seconds', 'localtime') AS start,
+        strftime('%H:%M', s.created_at, 'localtime') AS end,
+        c.code, c.title, s.duration
+      FROM study_sessions s
+      LEFT JOIN courses c ON s.course_id = c.id
+      ORDER BY s.created_at ASC
+    `;
+    db.all(query, [], (err, result) => (err ? reject(err) : resolve(result || [])));
+  });
+
+  const header = ['Date', 'Start', 'End', 'Subject Code', 'Subject Title', 'Duration (min)', 'Duration (sec)'];
+  const lines = [header.join(',')];
+  rows.forEach((r) => {
+    lines.push([r.date, r.start, r.end, r.code, r.title, (r.duration / 60).toFixed(1), r.duration].map(csvField).join(','));
+  });
+
+  // The BOM makes Excel read the file as UTF-8, so non-Latin subject names survive.
+  await fs.promises.writeFile(filePath, '﻿' + lines.join('\r\n') + '\r\n', 'utf8');
+  return { canceled: false, filePath, count: rows.length };
 });
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

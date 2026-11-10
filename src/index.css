@@ -275,6 +275,104 @@ body {
     .heatmap-day.l3 { background-color: #059669; border-color: #34d399; }
     .heatmap-day.l4 { background-color: #10b981; border-color: #6ee7b7; box-shadow: 0 0 8px var(--accent-glow); }
 
+    /* Analytics */
+    .section-head {
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: 10px; margin-bottom: 14px;
+    }
+    .section-box .section-head h3 { margin: 0; }
+    .section-box h3:has(+ .section-sub) { margin-bottom: 2px; }
+    .section-sub { margin: 0 0 14px 0; font-size: 12px; color: var(--text-sub); }
+    .chart-controls { display: flex; gap: 8px; flex-wrap: wrap; }
+    .chart-wrap { position: relative; width: 100%; }
+
+    .seg-group {
+      display: flex; background: var(--bg-surface); border: 1px solid var(--border-color);
+      padding: 3px; border-radius: 8px; gap: 2px;
+    }
+    .seg-btn {
+      background: none; border: none; padding: 4px 10px; border-radius: 6px;
+      color: var(--text-sub); font-weight: 600; font-size: 11px; cursor: pointer;
+      transition: background 0.15s, color 0.15s; white-space: nowrap;
+    }
+    .seg-btn:hover { color: var(--text-main); }
+    .seg-btn.active { background: var(--accent); color: #000; font-weight: 700; }
+
+    .summary-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+    .summary-tile {
+      background-color: var(--bg-card); border: 1px solid var(--border-color);
+      border-radius: 12px; padding: 14px 16px; min-width: 0;
+    }
+    .summary-tile-label { font-size: 10px; font-weight: 700; letter-spacing: 0.5px; color: var(--text-sub); text-transform: uppercase; }
+    .summary-tile-value { font-size: 20px; font-weight: 800; margin-top: 6px; }
+    .summary-tile-sub { font-size: 11px; color: var(--text-sub); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .analytics-two-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+    .analytics-two-col .section-box { min-width: 0; }
+
+    .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+
+    .share-bar {
+      display: flex; gap: 2px; height: 14px; border-radius: 4px; overflow: hidden;
+      background: var(--bg-surface); margin-bottom: 14px;
+    }
+    .share-bar > div { height: 100%; min-width: 2px; }
+    .share-list { display: flex; flex-direction: column; gap: 8px; }
+    .share-row { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+    .share-row-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .share-row-name b { font-weight: 700; }
+    .share-row-name span { color: var(--text-sub); }
+    .share-row-time { font-weight: 700; font-variant-numeric: tabular-nums; }
+    .share-row-pct { width: 40px; text-align: right; color: var(--text-sub); font-variant-numeric: tabular-nums; }
+
+    .hour-grid { display: grid; grid-template-columns: 34px repeat(24, minmax(0, 1fr)); gap: 3px; }
+    .hour-grid-label { font-size: 10px; color: var(--text-sub); font-weight: 600; display: flex; align-items: center; }
+    .hour-grid-hour { font-size: 9px; color: var(--text-sub); text-align: left; height: 14px; white-space: nowrap; }
+    .hour-cell {
+      height: 18px; border-radius: 3px; background-color: #161b22;
+      border: 1px solid var(--border-color);
+    }
+    .hour-cell.l1 { background-color: #064e3b; border-color: #047857; }
+    .hour-cell.l2 { background-color: #047857; border-color: #10b981; }
+    .hour-cell.l3 { background-color: #059669; border-color: #34d399; }
+    .hour-cell.l4 { background-color: #10b981; border-color: #6ee7b7; }
+    .scale-legend { display: flex; align-items: center; gap: 4px; justify-content: flex-end; margin-top: 10px; font-size: 10px; color: var(--text-sub); }
+    .scale-legend .hour-cell { width: 12px; height: 12px; }
+
+    .subject-card { display: flex; flex-direction: column; }
+    .subject-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .subject-card-head h3 { margin: 0; flex: 1; }
+    .subject-card .card-title { font-weight: 700; margin-bottom: 4px; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .subject-meta {
+      display: flex; flex-direction: column; gap: 10px;
+      margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color);
+    }
+    .meta-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 11px; color: var(--text-sub); }
+    .meta-row b { color: var(--text-main); font-weight: 700; }
+    .goal-bar { height: 5px; background: var(--bg-surface); border-radius: 3px; overflow: hidden; margin-top: 5px; }
+    .goal-bar > div { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.4s ease; }
+    .link-btn {
+      background: none; border: none; padding: 0; cursor: pointer;
+      color: var(--accent); font-size: 11px; font-weight: 700;
+    }
+    .link-btn:hover { text-decoration: underline; }
+    .goal-edit { display: flex; gap: 6px; align-items: center; font-size: 11px; color: var(--text-sub); }
+    .goal-edit input {
+      width: 64px; background: var(--bg-surface); border: 1px solid var(--accent);
+      color: var(--text-main); padding: 4px 6px; border-radius: 6px; font-size: 12px; outline: none;
+    }
+    .goal-edit .btn-primary { padding: 4px 10px; font-size: 11px; }
+    .goal-edit .btn-secondary { padding: 4px 6px; font-size: 11px; }
+
+    .btn-outline {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-main);
+      padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .btn-outline:hover { border-color: var(--accent); background: var(--bg-card-hover); }
+    .btn-outline:disabled { opacity: 0.5; cursor: default; }
+
     /* Grid & Cards */
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
     .stat-card {
