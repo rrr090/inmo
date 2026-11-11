@@ -104,7 +104,7 @@ pub fn import_csv_text(conn: &mut Connection, text: &str) -> Result<Value, Strin
         return Err(format!("This doesn't look like an inmo export. The first line should be:\n{CSV_HEADER}"));
     };
     let (c_title, c_sec, c_min) = (col("subject title"), col("duration (sec)"), col("duration (min)"));
-    // Exports from before 1.3 have no Note column.
+    // Exports from before 1.2.1 have no Note column.
     let c_note = col("note");
 
     let tx = conn.transaction().map_err(err)?;
