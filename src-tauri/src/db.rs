@@ -86,6 +86,11 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         "ALTER TABLE courses ADD COLUMN weekly_goal_seconds INTEGER DEFAULT 0",
         // 1.2: archived subjects keep their history but leave the library and timer.
         "ALTER TABLE courses ADD COLUMN archived INTEGER DEFAULT 0",
+        // 1.3: what a session was spent on, and exam dates with an optional hours target.
+        "ALTER TABLE study_sessions ADD COLUMN note TEXT",
+        "ALTER TABLE active_session ADD COLUMN note TEXT",
+        "ALTER TABLE courses ADD COLUMN exam_date TEXT",
+        "ALTER TABLE courses ADD COLUMN exam_target_seconds INTEGER DEFAULT 0",
     ] {
         if let Err(e) = conn.execute(sql, []) {
             if !e.to_string().to_lowercase().contains("duplicate column") {

@@ -1,10 +1,11 @@
 // The subject library in the sidebar, the subject menu, the add-subject dialog,
 // and the dashboard metrics above the timer.
 import { icon } from './icons.js';
-import { showToast, confirmDialog } from './notify.js';
+import { showToast, confirmDialog, showUndoToast } from './notify.js';
 import { state, activeCourses, archivedCourses, getActiveCourse, setActiveCourse, reloadData, courseById } from './state.js';
 import { escapeHtml, formatHM, formatCompact, emptyState, localDateKey, errorText } from './format.js';
 import { stopIfRunning } from './timer.js';
+import { renderExams, examTag } from './exams.js';
 
 let editingCourseId = null;
 let showArchived = false;
@@ -14,6 +15,7 @@ export function renderSubjects() {
   renderCourseList();
   renderTimerCourseBadge();
   updateMetricsDashboard();
+  renderExams();
 }
 
 function renderFirstRun() {
@@ -41,7 +43,7 @@ function courseRow(course) {
     <div class="course-item ${state.activeCourseId === course.id ? 'active' : ''}" id="course-row-${id}">
       <div class="course-info" onclick="window.selectCourse('${id}')">
         <div class="title">${escapeHtml(course.title)}</div>
-        <div class="code">${escapeHtml(course.code)} • ${formatHM(course.total_seconds)}</div>
+        <div class="code">${escapeHtml(course.code)} • ${formatHM(course.total_seconds)}${examTag(course) ? ` • <span class="exam-tag">${examTag(course)}</span>` : ''}</div>
       </div>
       <div class="course-actions">
         <button class="icon-btn" title="Edit subject" aria-label="Edit subject" onclick="event.stopPropagation(); window.enableCourseEdit('${id}')">${icon('pencil', 14)}</button>
@@ -171,14 +173,14 @@ export async function handleDeleteCourse(courseId) {
   if (!course) return;
   const confirmed = await confirmDialog({
     title: `Delete ${course.title}?`,
-    message: 'Its tasks and all of its logged sessions will be deleted too. This can\'t be undone. To keep its history, archive it instead.',
+    message: 'Its tasks and all of its logged sessions will be deleted too. To keep its history, archive it instead.',
     confirmLabel: 'Delete Subject',
   });
   if (!confirmed) return;
   try {
-    await window.api.deleteCourse(courseId);
+    const r = await window.api.deleteCourse(courseId);
     await reloadData();
-    showToast('Subject deleted', { message: course.title });
+    showUndoToast('Subject deleted', course.title, r.undoId, reloadData);
   } catch (err) {
     showToast('Could not delete the subject', { message: errorText(err), type: 'error' });
   }
@@ -189,13 +191,13 @@ export async function handleResetActiveCourse() {
   if (!course) return;
   const confirmed = await confirmDialog({
     title: `Reset time for ${course.title}?`,
-    message: 'All of its logged sessions will be deleted and its total will go back to 0h 0m. This can\'t be undone.',
+    message: 'All of its logged sessions will be deleted and its total will go back to 0h 0m.',
     confirmLabel: 'Reset Time',
   });
   if (!confirmed) return;
-  await window.api.resetCourseTime(course.id);
+  const r = await window.api.resetCourseTime(course.id);
   await reloadData();
-  showToast('Time reset', { message: course.title });
+  showUndoToast('Time reset', course.title, r.undoId, reloadData);
 }
 
 // ---------- Subject menu (⋯ on the to-do list) ----------

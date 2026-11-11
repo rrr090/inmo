@@ -4,7 +4,8 @@ import { renderIcons } from './icons.js';
 import { showToast } from './notify.js';
 import { state, onDataChanged, reloadData, getActiveCourse } from './state.js';
 import { formatDuration } from './format.js';
-import { initTimer, toggleTimer, setMode, renderModeTabs, updateInPageWidget } from './timer.js';
+import { initTimer, toggleTimer, setMode, renderModeTabs, updateInPageWidget, handleNoteInput, saveNote } from './timer.js';
+import * as exams from './exams.js';
 import * as subjects from './subjects.js';
 import * as tasks from './tasks.js';
 import * as analytics from './analytics.js';
@@ -81,6 +82,12 @@ Object.assign(window, {
   switchToTimerPage: () => switchPage('timer-page'),
   toggleTimer,
   setMode,
+  handleNoteInput,
+  saveNote,
+  // Exams
+  openExamDialog: exams.openExamDialog,
+  handleExamForActiveCourse: withActiveCourse(exams.openExamDialog),
+  useExamPaceAsGoal: exams.useExamPaceAsGoal,
   // Subjects
   selectCourse: subjects.selectCourse,
   enableCourseEdit: subjects.enableCourseEdit,
@@ -111,6 +118,7 @@ Object.assign(window, {
   openSessionDialog: history.openSessionDialog,
   handleDeleteSession: history.handleDeleteSession,
   showMoreHistory: history.showMoreHistory,
+  handleHistorySearch: history.handleHistorySearch,
   handleExportCsv: history.handleExportCsv,
   handleImportCsv: history.handleImportCsv,
   // Settings
@@ -124,6 +132,7 @@ Object.assign(window, {
   handleInstallUpdate: settings.handleInstallUpdate,
   handleCheckUpdates: settings.handleCheckUpdates,
   saveToggleSetting: settings.saveToggleSetting,
+  openLink: settings.openLink,
 });
 
 init();

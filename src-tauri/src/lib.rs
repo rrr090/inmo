@@ -6,6 +6,7 @@ mod data_io;
 mod db;
 mod idle;
 mod timer;
+mod trash;
 mod tray;
 mod updater;
 
@@ -125,6 +126,21 @@ pub fn stop_timer_for_exit(app: &AppHandle) {
 }
 
 // Installs a downloaded update on the way out, like the Electron build did.
+// The About links in Settings. Only these fixed addresses can be opened.
+#[tauri::command(async)]
+fn open_link(app: AppHandle, which: String) -> db::CmdResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    const REPO: &str = "https://github.com/rrr090/inmo";
+    let url = match which.as_str() {
+        "repo" => REPO.to_string(),
+        "releases" => format!("{REPO}/releases"),
+        "issues" => format!("{REPO}/issues/new"),
+        "author" => "https://github.com/rrr090".to_string(),
+        _ => return Err("Unknown link".into()),
+    };
+    app.opener().open_url(url, None::<&str>).map_err(db::err)
+}
+
 pub fn quit(app: &AppHandle) {
     stop_timer_for_exit(app);
     destroy_mini_widget(app);
@@ -147,6 +163,8 @@ pub fn run() {
             Some(vec![tray::MINIMIZED_ARG]),
         ))
         .plugin(tray::shortcut_plugin())
+        // Used from Rust only (open_link); the page has no permission to open anything itself.
+        .plugin(tauri_plugin_opener::init())
         // Opened in setup, after the single-instance check, so a second copy never touches it.
         .setup(|app| {
             let mut conn = db::open_db()?;
@@ -158,6 +176,7 @@ pub fn run() {
             app.manage(Timer(Mutex::new(TimerState::default())));
             app.manage(Recovery(Mutex::new(Some(recovery))));
             app.manage(PendingUpdate(Mutex::new(None)));
+            app.manage(trash::Trash::default());
 
             let handle = app.handle().clone();
             tray::setup(&handle)?;
@@ -227,6 +246,10 @@ pub fn run() {
             commands::add_task,
             commands::toggle_task,
             commands::delete_task,
+            commands::undo_delete,
+            commands::set_course_exam,
+            commands::timer_set_note,
+            open_link,
             commands::get_task_stats,
             commands::get_setting,
             commands::set_setting,

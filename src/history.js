@@ -1,13 +1,15 @@
 // The Session History page: the log, adding and editing sessions by hand, and
 // CSV export / import.
 import { icon } from './icons.js';
-import { showToast } from './notify.js';
+import { showToast, showUndoToast } from './notify.js';
 import { state, activeCourses, courseById, reloadData } from './state.js';
 import { escapeHtml, formatHM, formatDuration, localDateKey, localTimeKey, emptyState, errorText } from './format.js';
 
 const PAGE = 50;
 let shown = PAGE;
 let rowsById = new Map();
+let search = '';
+let searchTimer = null;
 
 export function isHistoryPageActive() {
   return Boolean(document.getElementById('history-page')?.classList.contains('active'));
@@ -16,7 +18,7 @@ export function isHistoryPageActive() {
 export async function renderHistory() {
   const tbody = document.getElementById('history-table-body');
   if (!tbody) return;
-  const { rows, total } = await window.api.getHistory(shown);
+  const { rows, total } = await window.api.getHistory(shown, search);
   rowsById = new Map(rows.map(r => [r.id, r]));
 
   const more = document.getElementById('history-more');
@@ -26,13 +28,15 @@ export async function renderHistory() {
   }
 
   if (rows.length === 0) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="4">${emptyState('history', 'No sessions yet', 'Finished study sessions are listed here. Studied without the timer? Add the session by hand.')}</td></tr>`;
+    tbody.innerHTML = search
+      ? `<tr class="empty-row"><td colspan="4">${emptyState('history', 'No matching sessions', `Nothing in notes or subject names matches "${search}".`)}</td></tr>`
+      : `<tr class="empty-row"><td colspan="4">${emptyState('history', 'No sessions yet', 'Finished study sessions are listed here. Studied without the timer? Add the session by hand.')}</td></tr>`;
     return;
   }
   tbody.innerHTML = rows.map(row => `
     <tr>
       <td>${escapeHtml(row.created_at)}</td>
-      <td><b>${escapeHtml(row.code)}</b> - ${escapeHtml(row.title)}</td>
+      <td><b>${escapeHtml(row.code)}</b> - ${escapeHtml(row.title)}${row.note ? `<div class="history-note">${escapeHtml(row.note)}</div>` : ''}</td>
       <td class="history-duration">${formatHM(row.duration)}</td>
       <td class="history-actions">
         <button class="delete-item-btn" onclick="window.openSessionDialog(${row.id})" title="Edit session" aria-label="Edit session">${icon('pencil', 15)}</button>
@@ -42,14 +46,26 @@ export async function renderHistory() {
   `).join('');
 }
 
+// Filters by note or subject as you type.
+export function handleHistorySearch(input) {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    search = input.value.trim();
+    shown = PAGE;
+    renderHistory();
+  }, 250);
+}
+
 export function showMoreHistory() {
   shown += PAGE;
   renderHistory();
 }
 
 export async function handleDeleteSession(sessionId) {
-  await window.api.deleteSession(sessionId);
+  const row = rowsById.get(sessionId);
+  const r = await window.api.deleteSession(sessionId);
   await reloadData();
+  showUndoToast('Session deleted', row ? `${formatDuration(row.duration)} · ${row.code}` : '', r.undoId, reloadData);
 }
 
 // ---------- Add / edit a session ----------
@@ -99,6 +115,10 @@ export function openSessionDialog(sessionId) {
           <input type="number" id="session-minutes" min="1" max="720" step="1" value="${durationMin}">
         </div>
       </div>
+      <div class="form-group">
+        <label for="session-note-field">What you worked on (optional)</label>
+        <input type="text" id="session-note-field" maxlength="500" value="${escapeHtml(editing?.note || '')}" placeholder="e.g. Chapter 4 exercises">
+      </div>
       <p class="modal-text" id="session-summary"></p>
       <div class="modal-actions">
         <button class="btn-secondary" data-action="cancel">Cancel</button>
@@ -118,7 +138,7 @@ export function openSessionDialog(sessionId) {
     const startAt = new Date(y, m - 1, d, hh, mm);
     const endAt = new Date(startAt.getTime() + minutes * 60000);
     if (endAt.getTime() > Date.now() + 60000) return { error: 'The session would end in the future.' };
-    return { courseId: $('#session-course').value, endedAt: Math.floor(endAt.getTime() / 1000), duration: minutes * 60, endAt };
+    return { courseId: $('#session-course').value, endedAt: Math.floor(endAt.getTime() / 1000), duration: minutes * 60, endAt, note: $('#session-note-field').value };
   };
   const refreshSummary = () => {
     const r = read();
@@ -137,8 +157,8 @@ export function openSessionDialog(sessionId) {
     const r = read();
     if (r.error) return refreshSummary();
     try {
-      if (editing) await window.api.updateSession(editing.id, r.courseId, r.endedAt, r.duration);
-      else await window.api.addSession(r.courseId, r.endedAt, r.duration);
+      if (editing) await window.api.updateSession(editing.id, r.courseId, r.endedAt, r.duration, r.note);
+      else await window.api.addSession(r.courseId, r.endedAt, r.duration, r.note);
       close();
       await reloadData();
       showToast(editing ? 'Session updated' : 'Session added', { message: `${formatDuration(r.duration)} · ${courseById(r.courseId)?.code || ''}` });

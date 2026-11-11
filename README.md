@@ -18,7 +18,10 @@ A desktop study tracker for university courses. Time your study sessions per sub
 - **Subjects and tasks:** add, edit and archive courses, each with its own to-do list. Archived subjects keep their history and still count in analytics.
 - **Analytics:** a 7/30/90-day focus trend (total or split by subject) with daily average, goal and previous-period lines, summary stats, week-over-week comparison, a 90-day activity heatmap, each subject's share of your time, weekday averages and a weekday × hour grid of when you study.
 - **Goals and streaks:** a daily target (2 hours unless you change it), optional weekly goals per subject, a running study streak and your longest streak ever.
-- **Session history:** every session, newest first. Add time you studied without the timer, edit or delete any session, and export or import CSV.
+- **Session notes:** type what you're working on under the timer, and it's saved with the session. History shows the notes and can search them, along with subject names.
+- **Session history:** every session, newest first. Add time you studied without the timer, edit or delete any session, and export or import CSV (notes included).
+- **Exams:** give a subject an exam date and, optionally, how many hours you want to have studied by then. The Timer page counts down to upcoming exams and shows the weekly pace needed, which you can turn into the subject's weekly goal in one click.
+- **Undo:** deleting a session, task or subject, or resetting a subject's time, shows an Undo button for a few seconds.
 - **Notifications:** Windows notifications when a Pomodoro or break ends, when you're back after being away, and when a session is saved, each of which can be turned off, plus an optional chime at the end of a Pomodoro or break.
 - **Floating timer:** an optional always-on-top widget that appears when you minimize the app or close it to the tray, so you can see or stop the timer from anywhere.
 - **Crash recovery:** a running session is saved as soon as it starts, so a crash or power cut doesn't lose your time. Closing inmo saves it normally.
@@ -68,7 +71,7 @@ npm install
 npm start
 ```
 
-Rust unit tests cover the timer, Pomodoro cycles, away detection, crash recovery, manual sessions, CSV import/export and backup restore:
+Rust unit tests cover the timer, Pomodoro cycles, away detection, crash recovery, manual sessions, notes and search, undo, CSV import/export and backup restore. They also run on every push (the CI workflow):
 
 ```bash
 node build-ui.js   # once: the Rust build embeds its output, tauri-ui-dist/
@@ -99,7 +102,7 @@ To build a signed installer locally instead, set `TAURI_SIGNING_PRIVATE_KEY` to 
 | App setup | `src-tauri/src/lib.rs` | Starts everything, the floating timer window, quitting |
 | Database | `src-tauri/src/db.rs` | Schema and migrations, settings, automatic backups |
 | Timer | `src-tauri/src/timer.rs` | The clock, Pomodoro breaks, away detection, crash recovery |
-| Commands | `src-tauri/src/commands.rs` | Subjects, sessions, tasks and settings for the interface |
+| Commands | `src-tauri/src/commands.rs`, `trash.rs` | Subjects, sessions, exams, tasks and settings for the interface; undo for deletes |
 | Import/export | `src-tauri/src/data_io.rs` | CSV export and import, backup and restore |
 | Tray, updates | `src-tauri/src/tray.rs`, `updater.rs`, `idle.rs` | Tray icon, global shortcut, start with Windows, auto-updates, idle time |
 | API bridge | `src/tauri-api.js` | Exposes `window.api`, where each method invokes one Rust command |

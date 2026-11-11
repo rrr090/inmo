@@ -49,6 +49,10 @@ export async function loadTimerSettings() {
   state.timerMode = mode === 'pomodoro' ? 'pomodoro' : 'stopwatch';
 }
 
+export function openLink(which) {
+  window.api.openLink(which).catch(err => showToast('Could not open the link', { message: errorText(err), type: 'error' }));
+}
+
 export async function renderSettingsPage() {
   for (const key of Object.keys(NUMBER_SETTINGS)) {
     const input = document.getElementById(`setting-${key}`);
@@ -72,6 +76,8 @@ export async function renderSettingsPage() {
 
   await renderBackupInfo();
   await renderUpdateInfo();
+  const about = document.getElementById('about-version');
+  if (about) about.innerText = `Version ${await window.__TAURI__.app.getVersion()}`;
 }
 
 export async function saveNumberSetting(key, input) {

@@ -84,10 +84,17 @@
 
         <div class="time-display" id="timer-display">00:00:00</div>
         <div class="timer-status" id="timer-status"></div>
+        <input type="text" id="session-note" class="session-note" maxlength="500" placeholder="What are you working on? (optional)"
+          aria-label="What you're working on" oninput="handleNoteInput(this)" onblur="saveNote(this)" onkeydown="if (event.key === 'Enter') this.blur()">
 
         <button class="play-btn" id="timer-btn" title="Start" onclick="toggleTimer()">
           <svg id="play-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
         </button>
+      </div>
+
+      <div class="section-box is-hidden" id="exams-box">
+        <h3 class="label-with-icon"><span data-icon="calendar" data-size="16"></span>Upcoming exams</h3>
+        <div id="exams-list"></div>
       </div>
 
       <div class="section-box" id="active-course-todos-box">
@@ -96,6 +103,7 @@
           <div class="menu-wrap">
             <button class="icon-btn" id="subject-menu-btn" onclick="toggleSubjectMenu(event)" title="Subject options" aria-label="Subject options" aria-haspopup="menu" aria-expanded="false"><span data-icon="ellipsis"></span></button>
             <div class="menu is-hidden" id="subject-menu" role="menu">
+              <button role="menuitem" onclick="handleExamForActiveCourse()"><span data-icon="calendar" data-size="14"></span>Exam date…</button>
               <button role="menuitem" onclick="handleResetActiveCourse()"><span data-icon="rotate-ccw" data-size="14"></span>Reset Time</button>
               <button role="menuitem" onclick="handleArchiveActiveCourse()"><span data-icon="archive" data-size="14"></span>Archive Subject</button>
               <button role="menuitem" class="danger" onclick="handleDeleteActiveCourse()"><span data-icon="trash-2" data-size="14"></span>Delete Subject</button>
@@ -196,6 +204,10 @@
           <button class="btn-outline" onclick="handleExportCsv()"><span data-icon="download" data-size="14"></span>Export CSV</button>
         </div>
       </div>
+      <label class="history-search">
+        <span data-icon="search" data-size="14"></span>
+        <input type="search" id="history-search" placeholder="Search notes and subjects" aria-label="Search sessions" oninput="handleHistorySearch(this)">
+      </label>
       <div class="section-box" style="padding: 0; overflow: hidden;">
         <table class="history-table">
           <thead>
@@ -362,6 +374,18 @@
       <div class="section-box">
         <h3>Updates</h3>
         <div class="section-sub update-info" id="update-info"></div>
+      </div>
+
+      <div class="section-box about-box">
+        <h3>About inmo</h3>
+        <p class="section-sub">A study timer with to-do lists, goals and analytics, made by rrr090. Your data stays on this computer. The source code, release notes and issue tracker are on GitHub.</p>
+        <div class="about-version" id="about-version"></div>
+        <div class="page-actions">
+          <button class="btn-outline" onclick="openLink('repo')"><span data-icon="external-link" data-size="14"></span>GitHub page</button>
+          <button class="btn-outline" onclick="openLink('releases')"><span data-icon="sparkles" data-size="14"></span>What's new</button>
+          <button class="btn-outline" onclick="openLink('issues')"><span data-icon="bug" data-size="14"></span>Report a problem</button>
+          <button class="btn-outline" onclick="openLink('author')"><span data-icon="user" data-size="14"></span>rrr090 on GitHub</button>
+        </div>
       </div>
     </div>
 

@@ -16,6 +16,32 @@ function getToastContainer() {
 }
 
 // Text goes in through textContent because it can include subject names.
+// After a delete: a toast with Undo, which puts the deleted rows back and then
+// calls `refresh`. Without an undo id (nothing was deleted) it's a plain toast.
+export function showUndoToast(title, message, undoId, refresh) {
+  if (!undoId) {
+    showToast(title, { message });
+    return;
+  }
+  showToast(title, {
+    message,
+    type: 'info',
+    duration: 8000,
+    action: {
+      label: 'Undo',
+      onClick: async () => {
+        try {
+          await window.api.undoDelete(undoId);
+          await refresh();
+          showToast('Restored', { message });
+        } catch (err) {
+          showToast('Could not undo', { message: String((err && err.message) || err), type: 'error' });
+        }
+      },
+    },
+  });
+}
+
 // `action` adds a button ({ label, onClick }); `duration: 0` keeps the toast until dismissed.
 export function showToast(title, { message = '', type = 'success', duration, action } = {}) {
   const toast = document.createElement('div');

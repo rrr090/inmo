@@ -1,6 +1,7 @@
 // The to-do list for the selected subject.
 import { icon } from './icons.js';
-import { getActiveCourse } from './state.js';
+import { getActiveCourse, reloadData } from './state.js';
+import { showUndoToast } from './notify.js';
 import { escapeHtml, emptyState } from './format.js';
 
 export async function loadTasks() {
@@ -18,10 +19,10 @@ export async function loadTasks() {
   container.innerHTML = tasks.map(t => {
     const id = escapeHtml(t.id);
     return `
-      <div class="task-item ${t.completed ? 'completed' : ''}">
+      <div class="task-item ${t.completed ? 'completed' : ''}" data-task-id="${id}">
         <div class="task-item-left" onclick="window.handleToggleTask('${id}')">
           <input type="checkbox" ${t.completed ? 'checked' : ''} aria-label="Done" onclick="event.stopPropagation(); window.handleToggleTask('${id}')">
-          <span>${escapeHtml(t.text)}</span>
+          <span class="task-text">${escapeHtml(t.text)}</span>
         </div>
         <button class="delete-item-btn" onclick="window.handleDeleteTask('${id}')" title="Delete task" aria-label="Delete task">${icon('trash-2', 15)}</button>
       </div>`;
@@ -44,6 +45,8 @@ export async function handleToggleTask(taskId) {
 }
 
 export async function handleDeleteTask(taskId) {
-  await window.api.deleteTask(taskId);
-  loadTasks();
+  const text = document.querySelector(`[data-task-id="${CSS.escape(taskId)}"] .task-text`)?.innerText || '';
+  const r = await window.api.deleteTask(taskId);
+  await reloadData();
+  showUndoToast('Task deleted', text, r.undoId, reloadData);
 }

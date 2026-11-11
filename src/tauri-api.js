@@ -13,11 +13,14 @@
     setCourseArchived: (courseId, archived) => invoke('set_course_archived', { courseId, archived }),
     resetCourseTime: (courseId) => invoke('reset_course_time', { courseId }),
     setCourseGoal: (courseId, seconds) => invoke('set_course_goal', { courseId, seconds }),
+    setCourseExam: (courseId, date, targetHours) => invoke('set_course_exam', { courseId, date, targetHours }),
+    // Deletes return { undoId }; this puts the latest one back.
+    undoDelete: (undoId) => invoke('undo_delete', { undoId }),
 
     // Sessions
-    getHistory: (limit) => invoke('get_history', { limit }),
-    addSession: (courseId, endedAt, duration) => invoke('add_session', { courseId, endedAt, duration }),
-    updateSession: (sessionId, courseId, endedAt, duration) => invoke('update_session', { sessionId, courseId, endedAt, duration }),
+    getHistory: (limit, search) => invoke('get_history', { limit, search }),
+    addSession: (courseId, endedAt, duration, note) => invoke('add_session', { courseId, endedAt, duration, note }),
+    updateSession: (sessionId, courseId, endedAt, duration, note) => invoke('update_session', { sessionId, courseId, endedAt, duration, note }),
     deleteSession: (sessionId) => invoke('delete_session', { sessionId }),
     getDailyStats: () => invoke('get_daily_stats'),
     getSessions: () => invoke('get_sessions'),
@@ -42,6 +45,7 @@
     timerStart: (courseId, mode) => invoke('timer_start', { courseId, mode }),
     timerStop: () => invoke('timer_stop'),
     timerResolveIdle: (keep) => invoke('timer_resolve_idle', { keep }),
+    timerSetNote: (note) => invoke('timer_set_note', { note }),
     onTimerState: (callback) => listen('timer-state', (event) => callback(event.payload)),
     onTimerEvent: (callback) => listen('timer-event', (event) => callback(event.payload)),
     takeRecoveryResult: () => invoke('take_recovery_result'),
@@ -59,5 +63,8 @@
     checkForUpdates: () => invoke('check_for_updates'),
     installUpdateNow: () => invoke('install_update_now'),
     onUpdateReady: (callback) => listen('update-ready', (event) => callback(event.payload)),
+
+    // About: 'repo', 'releases', 'issues' or 'author'
+    openLink: (which) => invoke('open_link', { which }),
   };
 })();

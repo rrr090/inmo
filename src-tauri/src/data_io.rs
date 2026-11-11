@@ -10,7 +10,7 @@ use tauri_plugin_dialog::DialogExt;
 use crate::db::{self, err, query_json, CmdResult, Db};
 use crate::timer::{Phase, Timer, MAIN_LABEL};
 
-pub const CSV_HEADER: &str = "Date,Start,End,Subject Code,Subject Title,Duration (min),Duration (sec)";
+pub const CSV_HEADER: &str = "Date,Start,End,Subject Code,Subject Title,Duration (min),Duration (sec),Note";
 
 fn csv_field(value: &Value) -> String {
     let text = match value {
@@ -32,7 +32,7 @@ pub fn sessions_csv(conn: &Connection) -> rusqlite::Result<(String, usize)> {
            strftime('%Y-%m-%d', s.created_at, 'localtime') AS date,
            strftime('%H:%M', s.created_at, '-' || s.duration || ' seconds', 'localtime') AS start,
            strftime('%H:%M', s.created_at, 'localtime') AS end,
-           c.code, c.title, s.duration
+           c.code, c.title, s.duration, s.note
          FROM study_sessions s
          LEFT JOIN courses c ON s.course_id = c.id
          ORDER BY s.created_at ASC",
@@ -50,6 +50,7 @@ pub fn sessions_csv(conn: &Connection) -> rusqlite::Result<(String, usize)> {
             r["title"].clone(),
             Value::String(format!("{:.1}", secs as f64 / 60.0)),
             json!(secs),
+            r["note"].clone(),
         ];
         out.push_str(&fields.iter().map(csv_field).collect::<Vec<_>>().join(","));
         out.push_str("\r\n");
@@ -103,6 +104,8 @@ pub fn import_csv_text(conn: &mut Connection, text: &str) -> Result<Value, Strin
         return Err(format!("This doesn't look like an inmo export. The first line should be:\n{CSV_HEADER}"));
     };
     let (c_title, c_sec, c_min) = (col("subject title"), col("duration (sec)"), col("duration (min)"));
+    // Exports from before 1.3 have no Note column.
+    let c_note = col("note");
 
     let tx = conn.transaction().map_err(err)?;
     let (mut imported, mut duplicates, mut invalid) = (0, 0, 0);
@@ -184,9 +187,10 @@ pub fn import_csv_text(conn: &mut Connection, text: &str) -> Result<Value, Strin
             duplicates += 1;
             continue;
         }
+        let note = crate::commands::clean_note(Some(&get(c_note)));
         tx.execute(
-            "INSERT INTO study_sessions (course_id, duration, created_at) VALUES (?, ?, ?)",
-            params![course_id, duration, ended_utc],
+            "INSERT INTO study_sessions (course_id, duration, created_at, note) VALUES (?, ?, ?, ?)",
+            params![course_id, duration, ended_utc, note],
         )
         .map_err(err)?;
         tx.execute("UPDATE courses SET total_seconds = total_seconds + ? WHERE id = ?", params![duration, course_id])
@@ -325,7 +329,7 @@ mod tests {
         let mut src = test_conn();
         src.execute_batch(
             "INSERT INTO courses (id, title, code, total_seconds) VALUES ('a', 'Data, Structures', 'CS2', 5400);
-             INSERT INTO study_sessions (course_id, duration, created_at) VALUES ('a', 3600, '2026-11-01 10:00:00');
+             INSERT INTO study_sessions (course_id, duration, created_at, note) VALUES ('a', 3600, '2026-11-01 10:00:00', 'Trees, \"heaps\"');
              INSERT INTO study_sessions (course_id, duration, created_at) VALUES ('a', 1800, '2026-11-02 23:30:00');",
         )
         .unwrap();
@@ -341,6 +345,9 @@ mod tests {
         assert_eq!(r["newSubjects"], json!(["CS2"]));
         assert_eq!(count(&dst, "SELECT total_seconds FROM courses"), 5400);
         assert_eq!(count(&dst, "SELECT COUNT(*) FROM study_sessions WHERE created_at LIKE '2026-11-01 10:00%'"), 1);
+        // Notes survive, commas and quotes included; a session without one stays without.
+        assert_eq!(count(&dst, "SELECT COUNT(*) FROM study_sessions WHERE note = 'Trees, \"heaps\"'"), 1);
+        assert_eq!(count(&dst, "SELECT COUNT(*) FROM study_sessions WHERE note IS NULL"), 1);
 
         // Again: everything is a duplicate.
         let r = import_csv_text(&mut dst, &csv).unwrap();

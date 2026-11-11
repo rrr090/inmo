@@ -52,6 +52,13 @@ function applySnapshot(snap) {
     status.innerText = text;
   }
 
+  // Don't overwrite what's being typed, or a change not yet saved.
+  const noteInput = document.getElementById('session-note');
+  if (noteInput && !notePending && document.activeElement !== noteInput) {
+    const note = snap.note || '';
+    if (noteInput.value !== note) noteInput.value = note;
+  }
+
   // Mode can't change mid-session.
   document.querySelectorAll('.mode-tab').forEach(tab => { tab.disabled = running && !onBreak; });
 
@@ -167,4 +174,24 @@ export function updateInPageWidget() {
     <span class="mini-timer-time">${escapeHtml(state.timer.timeStr)}</span>
     <span class="mini-timer-course">${escapeHtml(label)}</span>
   `;
+}
+
+// ---------- What you're working on ----------
+// Saved with the session; kept through a Pomodoro cycle, cleared by Stop.
+
+let noteTimer = null;
+let notePending = false;
+
+export function handleNoteInput(input) {
+  notePending = true;
+  clearTimeout(noteTimer);
+  noteTimer = setTimeout(() => saveNote(input), 500);
+}
+
+export function saveNote(input) {
+  clearTimeout(noteTimer);
+  if (!notePending) return;
+  window.api.timerSetNote(input.value)
+    .catch(err => console.error('Could not save the note:', err))
+    .finally(() => { notePending = false; });
 }

@@ -93,6 +93,9 @@ pub struct TimerState {
     pub pomodoros_done: i64,
     pub last_heartbeat_ms: i64,
     pub away: Option<Away>,
+    // What the session is spent on, typed on the Timer page. Kept through a
+    // Pomodoro cycle; a manual stop clears it.
+    pub note: Option<String>,
 }
 
 impl Default for TimerState {
@@ -109,6 +112,7 @@ impl Default for TimerState {
             pomodoros_done: 0,
             last_heartbeat_ms: 0,
             away: None,
+            note: None,
         }
     }
 }
@@ -172,6 +176,7 @@ impl TimerState {
             "pomodorosDone": self.pomodoros_done,
             "longBreakEvery": every,
             "awaySecs": self.away.and_then(|a| a.back_ms.map(|b| (b - a.from_ms) / 1000)),
+            "note": self.note,
         })
     }
 }
@@ -185,9 +190,12 @@ fn course_info(conn: &Connection, course_id: &str) -> rusqlite::Result<Option<(S
     .optional()
 }
 
-pub fn save_session(conn: &mut Connection, course_id: &str, duration: i64) -> rusqlite::Result<()> {
+pub fn save_session(conn: &mut Connection, course_id: &str, duration: i64, note: Option<&str>) -> rusqlite::Result<()> {
     let tx = conn.transaction()?;
-    tx.execute("INSERT INTO study_sessions (course_id, duration) VALUES (?, ?)", params![course_id, duration])?;
+    tx.execute(
+        "INSERT INTO study_sessions (course_id, duration, note) VALUES (?, ?, ?)",
+        params![course_id, duration, note],
+    )?;
     tx.execute("UPDATE courses SET total_seconds = total_seconds + ? WHERE id = ?", params![duration, course_id])?;
     tx.commit()
 }
@@ -211,12 +219,13 @@ pub fn start(state: &mut TimerState, conn: &Connection, course_id: &str, mode: M
     }
     // Record the session right away so a crash or power cut can't lose it.
     conn.execute(
-        "INSERT INTO active_session (id, course_id, start_timestamp, mode, last_heartbeat) VALUES (1, ?, ?, ?, ?)
+        "INSERT INTO active_session (id, course_id, start_timestamp, mode, last_heartbeat, note) VALUES (1, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET course_id = excluded.course_id,
                                        start_timestamp = excluded.start_timestamp,
                                        mode = excluded.mode,
-                                       last_heartbeat = excluded.last_heartbeat",
-        params![course_id, now, mode.as_str(), now],
+                                       last_heartbeat = excluded.last_heartbeat,
+                                       note = excluded.note",
+        params![course_id, now, mode.as_str(), now, state.note],
     )
     .map_err(db::err)?;
 
@@ -265,10 +274,11 @@ pub fn stop(state: &mut TimerState, conn: &mut Connection, now: i64) -> Result<V
             let saved = duration > MIN_SESSION_SECS;
             if saved {
                 let course_id = state.course_id.clone().unwrap_or_default();
-                save_session(conn, &course_id, duration).map_err(db::err)?;
+                save_session(conn, &course_id, duration, state.note.as_deref()).map_err(db::err)?;
             }
             state.phase = Phase::Idle;
             state.away = None;
+            state.note = None;
             session_event("stopped", state, saved, duration)
         }
     };
@@ -284,6 +294,17 @@ pub fn cancel(state: &mut TimerState, conn: &Connection) {
     state.phase = Phase::Idle;
     state.target_secs = 0;
     state.away = None;
+    state.note = None;
+}
+
+// Sets what the session is spent on, and records it for crash recovery.
+pub fn set_note(state: &mut TimerState, conn: &Connection, note: Option<String>) {
+    if state.phase == Phase::Focus {
+        if let Err(e) = conn.execute("UPDATE active_session SET note = ? WHERE id = 1", [&note]) {
+            eprintln!("Failed to record the note: {e}");
+        }
+    }
+    state.note = note;
 }
 
 // Advances the timer to `now`. `idle_ms` is how long since the last keyboard or
@@ -303,7 +324,8 @@ pub fn tick(state: &mut TimerState, conn: &mut Connection, now: i64, idle_ms: Op
             if state.target_secs > 0 && state.elapsed_secs(now) >= state.target_secs {
                 let duration = state.target_secs;
                 clear_active(conn);
-                let saved = save_session(conn, &state.course_id.clone().unwrap_or_default(), duration).is_ok();
+                let course_id = state.course_id.clone().unwrap_or_default();
+                let saved = save_session(conn, &course_id, duration, state.note.as_deref()).is_ok();
                 state.pomodoros_done += 1;
                 let every = setting_i64(conn, LONG_BREAK_EVERY.0, LONG_BREAK_EVERY.1, 1, 12);
                 let long = state.pomodoros_done % every == 0;
@@ -401,16 +423,16 @@ pub fn resolve_idle(state: &mut TimerState, conn: &Connection, keep: bool) -> Re
 // Called once at launch: a session left open by a crash is closed at its last
 // heartbeat, so time with the app closed isn't credited, and written to history.
 pub fn recover(conn: &mut Connection, now: i64) -> rusqlite::Result<Value> {
-    let row: Option<(Option<String>, Option<i64>, Option<String>, Option<i64>)> = conn
+    let row: Option<(Option<String>, Option<i64>, Option<String>, Option<i64>, Option<String>)> = conn
         .query_row(
-            "SELECT course_id, start_timestamp, mode, last_heartbeat FROM active_session WHERE id = 1",
+            "SELECT course_id, start_timestamp, mode, last_heartbeat, note FROM active_session WHERE id = 1",
             [],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
         )
         .optional()?;
 
-    let (course_id, start, mode, heartbeat) = match row {
-        Some((Some(c), Some(s), m, h)) if s != 0 => (c, s, m, h),
+    let (course_id, start, mode, heartbeat, note) = match row {
+        Some((Some(c), Some(s), m, h, n)) if s != 0 => (c, s, m, h, n),
         _ => return Ok(json!({ "recovered": false })),
     };
 
@@ -436,7 +458,11 @@ pub fn recover(conn: &mut Connection, now: i64) -> rusqlite::Result<Value> {
     };
 
     let tx = conn.transaction()?;
-    tx.execute("INSERT INTO study_sessions (course_id, duration) VALUES (?, ?)", params![course_id, duration])?;
+    // Logged at the time it ended, not at the time inmo was next opened.
+    tx.execute(
+        "INSERT INTO study_sessions (course_id, duration, note, created_at) VALUES (?, ?, ?, datetime(?, 'unixepoch'))",
+        params![course_id, duration, note, start / 1000 + duration],
+    )?;
     tx.execute("UPDATE courses SET total_seconds = total_seconds + ? WHERE id = ?", params![duration, course_id])?;
     tx.execute("DELETE FROM active_session WHERE id = 1", [])?;
     tx.commit()?;
@@ -771,6 +797,48 @@ mod tests {
         assert_eq!(ev[0]["breakSecs"], 180);
         assert_eq!(s.pomodoros_done, 0);
         assert_eq!(total(&conn), 240);
+    }
+
+    fn last_note(conn: &Connection) -> Option<String> {
+        conn.query_row("SELECT note FROM study_sessions ORDER BY id DESC LIMIT 1", [], |r| r.get(0)).unwrap()
+    }
+
+    #[test]
+    fn notes_are_saved_with_sessions() {
+        let mut conn = conn_with_course();
+        set_setting_value(&conn, FOCUS_MIN.0, "2").unwrap();
+        set_setting_value(&conn, SHORT_BREAK_MIN.0, "1").unwrap();
+        let mut s = TimerState::default();
+        set_note(&mut s, &conn, Some("Chapter 4".into()));
+        start(&mut s, &conn, "c1", Mode::Pomodoro, T0).unwrap();
+        tick(&mut s, &mut conn, T0 + 120_000, None);
+        assert_eq!(last_note(&conn).as_deref(), Some("Chapter 4"));
+        assert_eq!(s.note.as_deref(), Some("Chapter 4"), "kept for the next Pomodoro");
+
+        // Changed mid-session, then a manual stop saves the new one and clears it.
+        start(&mut s, &conn, "c1", Mode::Pomodoro, T0 + 200_000).unwrap();
+        set_note(&mut s, &conn, Some("Exercises".into()));
+        stop(&mut s, &mut conn, T0 + 290_000).unwrap();
+        assert_eq!(last_note(&conn).as_deref(), Some("Exercises"));
+        assert_eq!(s.note, None);
+    }
+
+    #[test]
+    fn recovery_keeps_the_note_and_the_real_end_time() {
+        let mut conn = conn_with_course();
+        let mut s = TimerState::default();
+        set_note(&mut s, &conn, Some("Revision".into()));
+        start(&mut s, &conn, "c1", Mode::Stopwatch, T0).unwrap();
+        tick(&mut s, &mut conn, T0 + 600_000, None); // heartbeat at +10 min, then a crash
+        recover(&mut conn, T0 + 86_400_000).unwrap();
+        assert_eq!(last_note(&conn).as_deref(), Some("Revision"));
+        let (ended, duration): (i64, i64) = conn
+            .query_row("SELECT CAST(strftime('%s', created_at) AS INTEGER), duration FROM study_sessions", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .unwrap();
+        assert_eq!(duration, 600);
+        assert_eq!(ended, T0 / 1000 + 600, "ended when the heartbeats stopped, not a day later");
     }
 
     #[test]
