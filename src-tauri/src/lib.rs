@@ -9,6 +9,7 @@ mod timer;
 mod tray;
 mod updater;
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
@@ -19,6 +20,35 @@ use timer::{Phase, Timer, TimerState, MAIN_LABEL, MINI_LABEL};
 use updater::PendingUpdate;
 
 const MINI_WIDGET_SETTING_KEY: &str = "mini_widget_on_minimize";
+// The close button hides the window to the tray instead of quitting.
+const CLOSE_TO_TRAY_KEY: &str = "close_to_tray";
+
+fn setting_on(app: &AppHandle, key: &str) -> bool {
+    // try_state: the main window exists slightly before setup manages the database.
+    app.try_state::<Db>()
+        .and_then(|db| db.0.lock().ok().map(|c| db::setting_bool(&c, key, false)))
+        .unwrap_or(false)
+}
+
+// Shows the floating timer when the main window goes out of sight (minimized or
+// hidden to the tray) during a session, if that's turned on.
+fn widget_if_studying(app: &AppHandle) {
+    let studying = app
+        .try_state::<Timer>()
+        .and_then(|t| t.0.lock().ok().map(|s| s.phase != Phase::Idle))
+        .unwrap_or(false);
+    if studying && setting_on(app, MINI_WIDGET_SETTING_KEY) {
+        let app = app.clone();
+        // Creating a window from inside the event loop's own callback can
+        // deadlock on Windows, so hand it off.
+        tauri::async_runtime::spawn(async move {
+            show_mini_widget(&app);
+            // Send the current time right away rather than on the next tick.
+            let snap = timer::snapshot_now(&app);
+            timer::broadcast(&app, &snap);
+        });
+    }
+}
 
 // ---------- Floating timer widget ----------
 
@@ -137,7 +167,11 @@ pub fn run() {
 
             if std::env::args().any(|a| a == tray::MINIMIZED_ARG) {
                 if let Some(main) = app.get_webview_window(MAIN_LABEL) {
-                    let _ = main.minimize();
+                    if setting_on(&handle, CLOSE_TO_TRAY_KEY) {
+                        let _ = main.hide();
+                    } else {
+                        let _ = main.minimize();
+                    }
                 }
             }
             Ok(())
@@ -150,26 +184,24 @@ pub fn run() {
             match event {
                 // Tauri has no minimize event; a resize that leaves the window minimized is one.
                 WindowEvent::Resized(_) => {
-                    if !window.is_minimized().unwrap_or(false) {
-                        return;
+                    if window.is_minimized().unwrap_or(false) {
+                        widget_if_studying(&app);
                     }
-                    // try_state: the main window exists slightly before setup manages these.
-                    let studying = app
-                        .try_state::<Timer>()
-                        .and_then(|t| t.0.lock().ok().map(|s| s.phase != Phase::Idle))
-                        .unwrap_or(false);
-                    let enabled = app.try_state::<Db>().and_then(|db| {
-                        db.0.lock().ok().map(|c| db::setting_bool(&c, MINI_WIDGET_SETTING_KEY, false))
-                    });
-                    if studying && enabled == Some(true) {
-                        // Creating a window from inside the event loop's own callback can
-                        // deadlock on Windows, so hand it off.
-                        tauri::async_runtime::spawn(async move {
-                            show_mini_widget(&app);
-                            // Send the current time right away rather than on the next tick.
-                            let snap = timer::snapshot_now(&app);
-                            timer::broadcast(&app, &snap);
-                        });
+                }
+                WindowEvent::CloseRequested { api, .. } if setting_on(&app, CLOSE_TO_TRAY_KEY) => {
+                    api.prevent_close();
+                    let _ = window.hide();
+                    widget_if_studying(&app);
+                    // Say where inmo went, the first time per launch.
+                    static TOLD: AtomicBool = AtomicBool::new(false);
+                    if !TOLD.swap(true, Ordering::SeqCst) {
+                        use tauri_plugin_notification::NotificationExt;
+                        let _ = app
+                            .notification()
+                            .builder()
+                            .title("inmo is still running")
+                            .body("It's in the tray. Right-click the tray icon to quit.")
+                            .show();
                     }
                 }
                 WindowEvent::Focused(true) => destroy_mini_widget(&app),
@@ -214,6 +246,7 @@ pub fn run() {
             tray::get_autostart,
             tray::set_autostart,
             updater::get_update_status,
+            updater::check_for_updates,
             updater::install_update_now,
             restore_main_window,
             stop_timer_from_widget,

@@ -647,5 +647,7 @@ body {
     .settings-toggles .setting-row:first-of-type { border-top: none; }
     .settings-toggles .setting-row-title { font-size: 13px; }
     .settings-toggles .setting-row-desc { font-size: 12px; }
+    .settings-inline { margin-top: 12px; }
+    .settings-inline .setting-row:first-of-type { border-top: 1px solid var(--border-color); }
     #backup-info { line-height: 1.6; margin-bottom: 14px; }
     .update-info { display: flex; flex-direction: column; gap: 12px; line-height: 1.6; }

@@ -1,8 +1,9 @@
 // The Settings page, and the update prompt.
 import { showToast, confirmDialog } from './notify.js';
-import { state } from './state.js';
+import { state, reloadData } from './state.js';
 import { escapeHtml, errorText } from './format.js';
 import { renderModeTabs } from './timer.js';
+import { renderIcons } from './icons.js';
 
 // Number settings: key, default, min, max. Must match the clamps in timer.rs.
 const NUMBER_SETTINGS = {
@@ -11,7 +12,28 @@ const NUMBER_SETTINGS = {
   pomodoro_long_break_min: [15, 0, 120],
   pomodoro_long_break_every: [4, 1, 12],
   idle_threshold_min: [10, 0, 240],
+  daily_goal_min: [120, 10, 1440],
 };
+
+// On/off settings shown as switches, with their defaults. The ids are
+// "toggle-<key>". Must match the defaults in timer.rs and lib.rs.
+const TOGGLE_SETTINGS = {
+  close_to_tray: false,
+  pomodoro_auto_continue: false,
+  notify_pomodoro: true,
+  notify_away: true,
+  notify_session: true,
+  pomodoro_sound: true,
+};
+
+async function readToggle(key) {
+  const v = await window.api.getSetting(key);
+  return v === 'true' ? true : v === 'false' ? false : TOGGLE_SETTINGS[key];
+}
+
+export async function saveToggleSetting(key, checked) {
+  await window.api.setSetting(key, checked ? 'true' : 'false');
+}
 
 async function readNumber(key) {
   const [def, min, max] = NUMBER_SETTINGS[key];
@@ -22,6 +44,7 @@ async function readNumber(key) {
 // Called once at startup, so the Pomodoro tab shows the right length right away.
 export async function loadTimerSettings() {
   state.focusMin = await readNumber('pomodoro_focus_min');
+  state.dailyGoalSecs = (await readNumber('daily_goal_min')) * 60;
   const mode = await window.api.getSetting('timer_mode');
   state.timerMode = mode === 'pomodoro' ? 'pomodoro' : 'stopwatch';
 }
@@ -32,6 +55,10 @@ export async function renderSettingsPage() {
     if (input) input.value = await readNumber(key);
   }
   document.getElementById('mini-widget-toggle').checked = (await window.api.getSetting('mini_widget_on_minimize')) === 'true';
+  for (const key of Object.keys(TOGGLE_SETTINGS)) {
+    const input = document.getElementById(`toggle-${key}`);
+    if (input) input.checked = await readToggle(key);
+  }
 
   const shortcut = await window.api.getShortcut();
   document.getElementById('shortcut-label').innerText = shortcut.label;
@@ -59,6 +86,10 @@ export async function saveNumberSetting(key, input) {
   if (key === 'pomodoro_focus_min') {
     state.focusMin = n;
     renderModeTabs();
+  }
+  if (key === 'daily_goal_min') {
+    state.dailyGoalSecs = n * 60;
+    await reloadData(); // redraws the goal bar and the trend chart's goal line
   }
 }
 
@@ -139,7 +170,29 @@ async function renderUpdateInfo() {
   el.innerHTML = pending
     ? `You have ${escapeHtml(version)}. Version <b>${escapeHtml(pending.version)}</b> is downloaded and installs when you close inmo.
        <div><button class="btn-primary" onclick="window.handleInstallUpdate()">Restart and update now</button></div>`
-    : `You have ${escapeHtml(version)}. New versions download in the background and install when you close inmo.`;
+    : `You have ${escapeHtml(version)}. New versions download in the background and install when you close inmo.
+       <div><button class="btn-outline" onclick="window.handleCheckUpdates(this)"><span data-icon="refresh-cw" data-size="14"></span>Check now</button></div>`;
+  renderIcons();
+}
+
+export async function handleCheckUpdates(button) {
+  const label = button.innerHTML;
+  button.disabled = true;
+  button.innerText = 'Checking…';
+  try {
+    const r = await window.api.checkForUpdates();
+    if (r.status === 'up-to-date') {
+      showToast('inmo is up to date', { message: `${await window.__TAURI__.app.getVersion()} is the latest version.`, type: 'info' });
+    }
+    // "ready" shows the Restart now toast through the update-ready event; a
+    // version downloaded earlier is already in the Updates box.
+    await renderUpdateInfo();
+  } catch (err) {
+    showToast('Could not check for updates', { message: errorText(err), type: 'error', duration: 9000 });
+  } finally {
+    button.disabled = false;
+    button.innerHTML = label;
+  }
 }
 
 export function listenForUpdates() {

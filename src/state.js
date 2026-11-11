@@ -9,6 +9,7 @@ export const state = {
   // The backend timer's last snapshot (see src-tauri/src/timer.rs).
   timer: { phase: 'idle', mode: 'stopwatch', isStudying: false, timeStr: '', courseId: null },
   focusMin: 25,
+  dailyGoalSecs: 2 * 3600, // the "daily_goal_min" setting
 };
 
 const listeners = [];

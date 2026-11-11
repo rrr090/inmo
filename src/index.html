@@ -61,7 +61,7 @@
         </div>
         <div class="metric-card">
           <div class="metric-header">
-            <span class="label-with-icon"><span data-icon="target" data-size="14"></span>DAILY GOAL (2H TARGET)</span>
+            <span class="label-with-icon"><span data-icon="target" data-size="14"></span><span id="daily-goal-label">DAILY GOAL (2H TARGET)</span></span>
             <span id="daily-progress-text">0m / 120m</span>
           </div>
           <div class="progress-bar-bg">
@@ -229,6 +229,71 @@
           <label class="setting-field">Long break after <span><input type="number" id="setting-pomodoro_long_break_every" min="1" max="12" onchange="saveNumberSetting('pomodoro_long_break_every', this)"> Pomodoros</span></label>
         </div>
         <p class="section-sub settings-note">A break of 0 minutes skips it. Changes apply from the next Pomodoro.</p>
+        <div class="settings-toggles settings-inline">
+        <div class="setting-row">
+          <div class="setting-row-info">
+            <span class="setting-row-icon" data-icon="repeat"></span>
+            <div>
+              <div class="setting-row-title">Start the next Pomodoro by itself</div>
+              <div class="setting-row-desc">When a break ends, the next Pomodoro starts on the same subject. Stop the timer to end the cycle.</div>
+            </div>
+          </div>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-pomodoro_auto_continue" onchange="saveToggleSetting('pomodoro_auto_continue', this.checked)"><span class="toggle-slider"></span></label>
+        </div>
+        </div>
+      </div>
+
+      <div class="section-box">
+        <h3>Daily goal</h3>
+        <p class="section-sub">The target behind the goal bar on the Timer page and the goal line in Analytics.</p>
+        <div class="settings-grid">
+          <label class="setting-field">Study <span><input type="number" id="setting-daily_goal_min" min="10" max="1440" onchange="saveNumberSetting('daily_goal_min', this)"> min a day</span></label>
+        </div>
+      </div>
+
+      <div class="section-box settings-toggles">
+        <h3>Notifications</h3>
+        <p class="section-sub">Windows notifications appear when inmo isn't the window in front. In-app messages always show.</p>
+        <div class="setting-row">
+          <div class="setting-row-info">
+            <span class="setting-row-icon" data-icon="timer"></span>
+            <div>
+              <div class="setting-row-title">Pomodoro done and break over</div>
+              <div class="setting-row-desc">Tells you when to take a break and when to get back to it</div>
+            </div>
+          </div>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-notify_pomodoro" onchange="saveToggleSetting('notify_pomodoro', this.checked)"><span class="toggle-slider"></span></label>
+        </div>
+        <div class="setting-row">
+          <div class="setting-row-info">
+            <span class="setting-row-icon" data-icon="bell"></span>
+            <div>
+              <div class="setting-row-title">Sound when a Pomodoro or break ends</div>
+              <div class="setting-row-desc">Plays the Windows "Reminder" sound, even while inmo is in front. Change it in Windows Sound settings.</div>
+            </div>
+          </div>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-pomodoro_sound" onchange="saveToggleSetting('pomodoro_sound', this.checked)"><span class="toggle-slider"></span></label>
+        </div>
+        <div class="setting-row">
+          <div class="setting-row-info">
+            <span class="setting-row-icon" data-icon="user-check"></span>
+            <div>
+              <div class="setting-row-title">Back after being away</div>
+              <div class="setting-row-desc">When the stopwatch noticed you were away</div>
+            </div>
+          </div>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-notify_away" onchange="saveToggleSetting('notify_away', this.checked)"><span class="toggle-slider"></span></label>
+        </div>
+        <div class="setting-row">
+          <div class="setting-row-info">
+            <span class="setting-row-icon" data-icon="circle-check"></span>
+            <div>
+              <div class="setting-row-title">Started and saved</div>
+              <div class="setting-row-desc">When the tray or Ctrl+Alt+S starts a session, and when one is saved</div>
+            </div>
+          </div>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-notify_session" onchange="saveToggleSetting('notify_session', this.checked)"><span class="toggle-slider"></span></label>
+        </div>
       </div>
 
       <div class="section-box">
@@ -271,6 +336,16 @@
             </div>
           </div>
           <label class="toggle-switch"><input type="checkbox" id="autostart-toggle" onchange="toggleAutostart(this)"><span class="toggle-slider"></span></label>
+        </div>
+        <div class="setting-row">
+          <div class="setting-row-info">
+            <span class="setting-row-icon" data-icon="panel-bottom-close"></span>
+            <div>
+              <div class="setting-row-title">Close to the tray</div>
+              <div class="setting-row-desc">The close button hides inmo instead of quitting, so the timer and Ctrl+Alt+S keep working. Quit from the tray icon.</div>
+            </div>
+          </div>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-close_to_tray" onchange="saveToggleSetting('close_to_tray', this.checked)"><span class="toggle-slider"></span></label>
         </div>
       </div>
 

@@ -122,6 +122,8 @@ Object.assign(window, {
   handleOpenBackups: settings.handleOpenBackups,
   handleRestoreBackup: settings.handleRestoreBackup,
   handleInstallUpdate: settings.handleInstallUpdate,
+  handleCheckUpdates: settings.handleCheckUpdates,
+  saveToggleSetting: settings.saveToggleSetting,
 });
 
 init();

@@ -3,11 +3,8 @@
 import { icon } from './icons.js';
 import { showToast, confirmDialog } from './notify.js';
 import { state, activeCourses, archivedCourses, getActiveCourse, setActiveCourse, reloadData, courseById } from './state.js';
-import { escapeHtml, formatHM, emptyState, localDateKey, errorText } from './format.js';
+import { escapeHtml, formatHM, formatCompact, emptyState, localDateKey, errorText } from './format.js';
 import { stopIfRunning } from './timer.js';
-
-const DAILY_GOAL_SECONDS = 2 * 3600;
-export { DAILY_GOAL_SECONDS };
 
 let editingCourseId = null;
 let showArchived = false;
@@ -253,11 +250,14 @@ function updateMetricsDashboard() {
   const todayStr = localDateKey(new Date());
   const todayRecord = state.dailyStats.find(d => d.date === todayStr);
   const todaySeconds = todayRecord ? todayRecord.total_seconds : 0;
-  const progressPercent = Math.min(100, Math.round((todaySeconds / DAILY_GOAL_SECONDS) * 100));
+  const goal = state.dailyGoalSecs;
+  const progressPercent = Math.min(100, Math.round((todaySeconds / goal) * 100));
 
   const progressText = document.getElementById('daily-progress-text');
   const progressFill = document.getElementById('daily-progress-fill');
-  if (progressText) progressText.innerText = `${Math.floor(todaySeconds / 60)}m / ${DAILY_GOAL_SECONDS / 60}m`;
+  if (progressText) progressText.innerText = `${Math.floor(todaySeconds / 60)}m / ${goal / 60}m`;
+  const goalLabel = document.getElementById('daily-goal-label');
+  if (goalLabel) goalLabel.innerText = `DAILY GOAL (${formatCompact(goal).toUpperCase()} TARGET)`;
   if (progressFill) progressFill.style.width = `${progressPercent}%`;
 
   // Days in a row with study, counting back from today (or yesterday, if today has none yet).

@@ -12,17 +12,18 @@ A desktop study tracker for university courses. Time your study sessions per sub
 
 ## Features
 
-- **Focus timer:** a stopwatch, or Pomodoros with automatic short and long breaks (lengths are up to you), logged against the subject you pick. The clock runs in the app's backend, so it keeps exact time while the window is minimized.
+- **Focus timer:** a stopwatch, or Pomodoros with automatic short and long breaks (lengths are up to you, and the next Pomodoro can start by itself after a break), logged against the subject you pick. The clock runs in the app's backend, so it keeps exact time while the window is minimized.
 - **Away detection:** if the stopwatch runs with no keyboard or mouse activity for a while (10 minutes by default), inmo asks when you're back whether to keep that time.
-- **Tray and shortcut:** start or stop the timer from the tray icon or with Ctrl+Alt+S from any app. inmo can also start with Windows.
+- **Tray and shortcut:** start or stop the timer from the tray icon or with Ctrl+Alt+S from any app. inmo can start with Windows, and the close button can send it to the tray instead of quitting.
 - **Subjects and tasks:** add, edit and archive courses, each with its own to-do list. Archived subjects keep their history and still count in analytics.
 - **Analytics:** a 7/30/90-day focus trend (total or split by subject) with daily average, goal and previous-period lines, summary stats, week-over-week comparison, a 90-day activity heatmap, each subject's share of your time, weekday averages and a weekday × hour grid of when you study.
-- **Goals and streaks:** a daily 2-hour target, optional weekly goals per subject, a running study streak and your longest streak ever.
+- **Goals and streaks:** a daily target (2 hours unless you change it), optional weekly goals per subject, a running study streak and your longest streak ever.
 - **Session history:** every session, newest first. Add time you studied without the timer, edit or delete any session, and export or import CSV.
-- **Floating timer:** an optional always-on-top widget that appears when you minimize the app, so you can see or stop the timer from anywhere.
+- **Notifications:** Windows notifications when a Pomodoro or break ends, when you're back after being away, and when a session is saved, each of which can be turned off, plus an optional chime at the end of a Pomodoro or break.
+- **Floating timer:** an optional always-on-top widget that appears when you minimize the app or close it to the tray, so you can see or stop the timer from anywhere.
 - **Crash recovery:** a running session is saved as soon as it starts, so a crash or power cut doesn't lose your time. Closing inmo saves it normally.
 - **Backups:** a weekly copy of your data (the newest 8 are kept), a "Back up now" button, and restore from any backup in Settings.
-- **Auto-updates:** new versions download in the background and install when you close inmo.
+- **Auto-updates:** new versions download in the background and install when you close inmo. Settings also has "Check now".
 - **One window:** opening inmo while it's already running brings the existing window forward instead of starting a second copy.
 
 ## Install

@@ -66,13 +66,19 @@ async function handleTimerEvent(ev) {
       await reloadData();
       break;
     case 'pomodoro-complete': {
-      const brk = ev.breakSecs ? ` Take a ${Math.round(ev.breakSecs / 60)}-minute ${ev.longBreak ? 'long ' : ''}break.` : '';
+      const brk = ev.breakSecs
+        ? ` Take a ${Math.round(ev.breakSecs / 60)}-minute ${ev.longBreak ? 'long ' : ''}break.`
+        : ev.autoStarted ? ' The next one has started.' : '';
       showToast('Pomodoro complete', { message: `${formatDuration(ev.duration)} added to ${ev.courseCode}.${brk}`, duration: 8000 });
       await reloadData();
       break;
     }
     case 'break-over':
-      showToast('Break\'s over', { message: 'Start the next Pomodoro when you\'re ready.', type: 'info', duration: 8000 });
+      showToast('Break\'s over', {
+        message: ev.autoStarted ? `The next Pomodoro for ${ev.courseCode} has started.` : 'Start the next Pomodoro when you\'re ready.',
+        type: 'info',
+        duration: 8000,
+      });
       break;
     case 'idle-return':
       askAboutIdleTime(ev.awaySecs, ev.courseCode);

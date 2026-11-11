@@ -3,7 +3,6 @@
 import { showToast } from './notify.js';
 import { state, activeCourses, reloadData } from './state.js';
 import { escapeHtml, formatHM, formatCompact, localDateKey, parseDateKey, addDays, daysBack, fmtDay, weekdayIndex, emptyState, errorText } from './format.js';
-import { DAILY_GOAL_SECONDS } from './subjects.js';
 
 // Subject colors, validated for colorblind separation on the dark card surface.
 // Assigned by a subject's position in the library, so a subject keeps the same
@@ -322,7 +321,7 @@ function renderTrendChart() {
     });
   }
 
-  datasets.push(referenceLine(`Daily goal (${formatCompact(DAILY_GOAL_SECONDS)})`, DAILY_GOAL_SECONDS, range, {
+  datasets.push(referenceLine(`Daily goal (${formatCompact(state.dailyGoalSecs)})`, state.dailyGoalSecs, range, {
     borderColor: 'rgba(243, 244, 246, 0.4)',
     borderWidth: 1.5,
     borderDash: [2, 4],

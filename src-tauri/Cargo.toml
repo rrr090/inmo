@@ -23,7 +23,7 @@ tauri-plugin-notification = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
 tokio = { version = "1", features = ["time"] }
-windows-sys = { version = "0.61", features = ["Win32_UI_Input_KeyboardAndMouse", "Win32_System_SystemInformation"] }
+windows-sys = { version = "0.61", features = ["Win32_UI_Input_KeyboardAndMouse", "Win32_System_SystemInformation", "Win32_Media_Audio", "Win32_Foundation"] }
 
 [profile.release]
 codegen-units = 1

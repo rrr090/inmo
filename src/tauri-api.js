@@ -56,6 +56,7 @@
 
     // Updates
     getUpdateStatus: () => invoke('get_update_status'),
+    checkForUpdates: () => invoke('check_for_updates'),
     installUpdateNow: () => invoke('install_update_now'),
     onUpdateReady: (callback) => listen('update-ready', (event) => callback(event.payload)),
   };

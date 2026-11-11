@@ -27,6 +27,15 @@ pub const SHORT_BREAK_MIN: (&str, i64) = ("pomodoro_short_break_min", 5);
 pub const LONG_BREAK_MIN: (&str, i64) = ("pomodoro_long_break_min", 15);
 pub const LONG_BREAK_EVERY: (&str, i64) = ("pomodoro_long_break_every", 4); // pomodoros
 pub const IDLE_MIN: (&str, i64) = ("idle_threshold_min", 10); // 0 turns idle detection off
+// Start the next Pomodoro by itself when a break ends.
+pub const AUTO_CONTINUE: (&str, bool) = ("pomodoro_auto_continue", false);
+
+// Desktop notifications (shown while the window isn't in front), by type, and
+// the chime at the end of a Pomodoro or a break.
+pub const NOTIFY_POMODORO: (&str, bool) = ("notify_pomodoro", true); // Pomodoro done, break over
+pub const NOTIFY_AWAY: (&str, bool) = ("notify_away", true); // back after an idle stretch
+pub const NOTIFY_SESSION: (&str, bool) = ("notify_session", true); // started or saved from the tray/shortcut
+pub const SOUND: (&str, bool) = ("pomodoro_sound", true);
 
 pub fn focus_secs(conn: &Connection) -> i64 {
     setting_i64(conn, FOCUS_MIN.0, FOCUS_MIN.1, 1, 180) * 60
@@ -304,7 +313,6 @@ pub fn tick(state: &mut TimerState, conn: &mut Connection, now: i64, idle_ms: Op
                 let mut ev = session_event("pomodoro-complete", state, saved, duration);
                 ev["breakSecs"] = json!(break_secs);
                 ev["longBreak"] = json!(long);
-                events.push(ev);
 
                 if long {
                     state.pomodoros_done = 0;
@@ -317,7 +325,9 @@ pub fn tick(state: &mut TimerState, conn: &mut Connection, now: i64, idle_ms: Op
                 } else {
                     state.phase = Phase::Idle;
                     state.target_secs = 0;
+                    ev["autoStarted"] = json!(continue_cycle(state, conn, now));
                 }
+                events.push(ev);
                 return events;
             }
 
@@ -345,13 +355,30 @@ pub fn tick(state: &mut TimerState, conn: &mut Connection, now: i64, idle_ms: Op
         }
         Phase::Break => {
             if state.elapsed_secs(now) >= state.target_secs {
+                let long_break = state.long_break;
                 state.phase = Phase::Idle;
                 state.target_secs = 0;
-                events.push(json!({ "kind": "break-over", "longBreak": state.long_break }));
+                let auto = continue_cycle(state, conn, now);
+                events.push(json!({
+                    "kind": "break-over",
+                    "longBreak": long_break,
+                    "autoStarted": auto,
+                    "courseCode": state.course_code,
+                }));
             }
         }
     }
     events
+}
+
+// With auto-continue on, starts the next Pomodoro on the same subject. Returns
+// false (and leaves the timer idle) if it's off or the subject is gone or archived.
+fn continue_cycle(state: &mut TimerState, conn: &Connection, now: i64) -> bool {
+    if state.mode != Mode::Pomodoro || !db::setting_bool(conn, AUTO_CONTINUE.0, AUTO_CONTINUE.1) {
+        return false;
+    }
+    let Some(course_id) = state.course_id.clone() else { return false };
+    start(state, conn, &course_id, Mode::Pomodoro, now).is_ok()
 }
 
 // The answer to "you were away for N minutes, keep that time?". Removing it moves
@@ -440,6 +467,40 @@ fn notify(app: &AppHandle, title: &str, body: &str) {
     let _ = app.notification().builder().title(title).body(body).show();
 }
 
+// Plays the Windows "Reminder" sound, which people can change or mute in
+// Sound settings like any other system sound.
+#[cfg(windows)]
+fn play_chime() {
+    use std::sync::OnceLock;
+    use windows_sys::Win32::Media::Audio::{PlaySoundW, SND_ALIAS, SND_ASYNC, SND_NODEFAULT};
+    static NAME: OnceLock<Vec<u16>> = OnceLock::new();
+    let name = NAME.get_or_init(|| "Notification.Reminder\0".encode_utf16().collect());
+    unsafe {
+        PlaySoundW(name.as_ptr(), std::ptr::null_mut(), SND_ALIAS | SND_ASYNC | SND_NODEFAULT);
+    }
+}
+
+#[cfg(not(windows))]
+fn play_chime() {}
+
+struct NotifyPrefs {
+    pomodoro: bool,
+    away: bool,
+    session: bool,
+    sound: bool,
+}
+
+impl NotifyPrefs {
+    fn read(app: &AppHandle) -> NotifyPrefs {
+        let get = |(key, default): (&str, bool)| {
+            app.try_state::<Db>()
+                .and_then(|db| db.0.lock().ok().map(|c| db::setting_bool(&c, key, default)))
+                .unwrap_or(default)
+        };
+        NotifyPrefs { pomodoro: get(NOTIFY_POMODORO), away: get(NOTIFY_AWAY), session: get(NOTIFY_SESSION), sound: get(SOUND) }
+    }
+}
+
 fn short_duration(secs: i64) -> String {
     if secs < 60 {
         format!("{secs} sec")
@@ -451,16 +512,35 @@ fn short_duration(secs: i64) -> String {
 }
 
 // The page shows a toast for each event. A desktop notification covers the case
-// where the window can't be seen.
+// where the window can't be seen. Called with no locks held: it reads settings.
 pub fn publish_events(app: &AppHandle, events: &[Value]) {
+    if events.is_empty() {
+        return;
+    }
+    let prefs = NotifyPrefs::read(app);
     let focused = main_focused(app);
     for ev in events {
         let _ = app.emit("timer-event", ev.clone());
-        if focused {
+        let kind = ev["kind"].as_str().unwrap_or("");
+        if prefs.sound && matches!(kind, "pomodoro-complete" | "break-over") {
+            play_chime();
+        }
+        let wanted = match kind {
+            "pomodoro-complete" | "break-over" => prefs.pomodoro,
+            "idle-return" => prefs.away,
+            "started" | "stopped" => prefs.session,
+            _ => false,
+        };
+        if focused || !wanted {
             continue;
         }
         let code = ev["courseCode"].as_str().unwrap_or("");
         match ev["kind"].as_str() {
+            Some("pomodoro-complete") if ev["autoStarted"] == Value::Bool(true) => notify(
+                app,
+                "Pomodoro complete",
+                &format!("{} added to {code}. The next one has started.", short_duration(ev["duration"].as_i64().unwrap_or(0))),
+            ),
             Some("pomodoro-complete") => {
                 let brk = ev["breakSecs"].as_i64().unwrap_or(0);
                 let body = if brk > 0 {
@@ -471,6 +551,9 @@ pub fn publish_events(app: &AppHandle, events: &[Value]) {
                 notify(app, "Pomodoro complete", &body);
             }
             Some("started") => notify(app, "Timer started", &format!("Timing {code}")),
+            Some("break-over") if ev["autoStarted"] == Value::Bool(true) => {
+                notify(app, "Break's over", &format!("The next Pomodoro for {code} has started."))
+            }
             Some("break-over") => notify(app, "Break's over", "Ready for the next Pomodoro?"),
             Some("idle-return") => notify(
                 app,
@@ -688,6 +771,64 @@ mod tests {
         assert_eq!(ev[0]["breakSecs"], 180);
         assert_eq!(s.pomodoros_done, 0);
         assert_eq!(total(&conn), 240);
+    }
+
+    #[test]
+    fn auto_continue_starts_the_next_pomodoro_after_a_break() {
+        let mut conn = conn_with_course();
+        set_setting_value(&conn, FOCUS_MIN.0, "2").unwrap();
+        set_setting_value(&conn, SHORT_BREAK_MIN.0, "1").unwrap();
+        set_setting_value(&conn, AUTO_CONTINUE.0, "true").unwrap();
+        let mut s = TimerState::default();
+        let mut now = T0;
+        start(&mut s, &conn, "c1", Mode::Pomodoro, now).unwrap();
+        now += 120_000;
+        tick(&mut s, &mut conn, now, None);
+        assert_eq!(s.phase, Phase::Break);
+        now += 60_000;
+        let ev = tick(&mut s, &mut conn, now, None);
+        assert_eq!(ev[0]["kind"], "break-over");
+        assert_eq!(ev[0]["autoStarted"], true);
+        assert_eq!(s.phase, Phase::Focus);
+        assert_eq!(s.start_ms, now);
+        assert_eq!(s.pomodoros_done, 1, "the cycle count carries on");
+        assert_eq!(active_rows(&conn), 1, "crash recovery covers the new Pomodoro");
+
+        // Archived during the break: the cycle stops instead.
+        now += 120_000;
+        tick(&mut s, &mut conn, now, None);
+        conn.execute("UPDATE courses SET archived = 1", []).unwrap();
+        now += 60_000;
+        let ev = tick(&mut s, &mut conn, now, None);
+        assert_eq!(ev[0]["autoStarted"], false);
+        assert_eq!(s.phase, Phase::Idle);
+    }
+
+    #[test]
+    fn auto_continue_with_no_break_goes_straight_on() {
+        let mut conn = conn_with_course();
+        set_setting_value(&conn, FOCUS_MIN.0, "2").unwrap();
+        set_setting_value(&conn, SHORT_BREAK_MIN.0, "0").unwrap();
+        set_setting_value(&conn, AUTO_CONTINUE.0, "true").unwrap();
+        let mut s = TimerState::default();
+        start(&mut s, &conn, "c1", Mode::Pomodoro, T0).unwrap();
+        let ev = tick(&mut s, &mut conn, T0 + 120_000, None);
+        assert_eq!(ev[0]["kind"], "pomodoro-complete");
+        assert_eq!(ev[0]["autoStarted"], true);
+        assert_eq!(s.phase, Phase::Focus);
+        assert_eq!(total(&conn), 120);
+    }
+
+    #[test]
+    fn without_auto_continue_the_timer_waits() {
+        let mut conn = conn_with_course();
+        set_setting_value(&conn, FOCUS_MIN.0, "2").unwrap();
+        set_setting_value(&conn, SHORT_BREAK_MIN.0, "0").unwrap();
+        let mut s = TimerState::default();
+        start(&mut s, &conn, "c1", Mode::Pomodoro, T0).unwrap();
+        let ev = tick(&mut s, &mut conn, T0 + 120_000, None);
+        assert_eq!(ev[0]["autoStarted"], false);
+        assert_eq!(s.phase, Phase::Idle);
     }
 
     #[test]
