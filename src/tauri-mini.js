@@ -23,4 +23,18 @@
     }
   });
   window.addEventListener('mouseup', () => { downAt = null; });
+
+  const stopBtn = document.getElementById('stop-btn');
+  window.miniApi.onTimerState((data) => {
+    document.getElementById('time').innerText = (data && data.timeStr) || '00:00:00';
+    document.getElementById('course').innerText = (data && data.courseLabel) || 'No active subject';
+    stopBtn.innerText = data && data.phase === 'break' ? 'SKIP' : 'STOP';
+  });
+  document.getElementById('widget').addEventListener('click', (e) => {
+    if (e.target !== stopBtn) window.miniApi.restoreMainWindow();
+  });
+  stopBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    window.miniApi.stopTimer();
+  });
 })();

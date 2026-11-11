@@ -16,7 +16,8 @@ function getToastContainer() {
 }
 
 // Text goes in through textContent because it can include subject names.
-export function showToast(title, { message = '', type = 'success', duration } = {}) {
+// `action` adds a button ({ label, onClick }); `duration: 0` keeps the toast until dismissed.
+export function showToast(title, { message = '', type = 'success', duration, action } = {}) {
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
   toast.innerHTML = `
@@ -24,6 +25,7 @@ export function showToast(title, { message = '', type = 'success', duration } = 
     <div class="toast-body">
       <div class="toast-title"></div>
       <div class="toast-message"></div>
+      ${action ? '<button class="toast-action"></button>' : ''}
     </div>
     <button class="icon-btn" aria-label="Dismiss" title="Dismiss">${icon('x', 14)}</button>
   `;
@@ -36,14 +38,20 @@ export function showToast(title, { message = '', type = 'success', duration } = 
     toast.classList.add('leaving');
     setTimeout(() => toast.remove(), EXIT_ANIMATION_MS);
   };
-  toast.querySelector('button').onclick = dismiss;
-  timer = setTimeout(dismiss, duration ?? (type === 'error' ? 7000 : 4000));
+  toast.querySelector('.icon-btn').onclick = dismiss;
+  if (action) {
+    const btn = toast.querySelector('.toast-action');
+    btn.textContent = action.label;
+    btn.onclick = () => { dismiss(); action.onClick(); };
+  }
+  const ms = duration ?? (type === 'error' ? 7000 : 4000);
+  if (ms > 0) timer = setTimeout(dismiss, ms);
 
   getToastContainer().appendChild(toast);
 }
 
 // Resolves to true if confirmed. Cancel has focus, so pressing Enter by accident is safe.
-export function confirmDialog({ title, message, confirmLabel }) {
+export function confirmDialog({ title, message, confirmLabel, cancelLabel = 'Cancel', danger = true }) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay open';
@@ -52,14 +60,15 @@ export function confirmDialog({ title, message, confirmLabel }) {
         <h2></h2>
         <p class="modal-text"></p>
         <div class="modal-actions">
-          <button class="btn-secondary" data-action="cancel">Cancel</button>
-          <button class="btn-danger" data-action="confirm"></button>
+          <button class="btn-secondary" data-action="cancel"></button>
+          <button class="${danger ? 'btn-danger' : 'btn-primary'}" data-action="confirm"></button>
         </div>
       </div>
     `;
     overlay.querySelector('h2').textContent = title;
     overlay.querySelector('.modal-text').textContent = message;
     overlay.querySelector('[data-action="confirm"]').textContent = confirmLabel;
+    overlay.querySelector('[data-action="cancel"]').textContent = cancelLabel;
 
     const finish = (result) => {
       document.removeEventListener('keydown', onKeydown, true);
@@ -83,9 +92,4 @@ export function confirmDialog({ title, message, confirmLabel }) {
     document.body.appendChild(overlay);
     overlay.querySelector('[data-action="cancel"]').focus();
   });
-}
-
-// A toast can't be seen while the app is minimized or behind other windows.
-export function desktopNotify(title, body) {
-  if (!document.hasFocus()) new Notification(title, { body });
 }

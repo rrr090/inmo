@@ -1,6 +1,6 @@
 [package]
 name = "inmo"
-version = "1.1.0"
+version = "1.2.0"
 description = "academic tracker"
 edition = "2021"
 
@@ -12,12 +12,18 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-rusqlite = { version = "0.41.1", features = ["bundled"] }
+csv = "1"
+rusqlite = { version = "0.41", features = ["backup", "bundled"] }
 serde_json = "1.0.154"
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-autostart = "2"
 tauri-plugin-dialog = "2"
+tauri-plugin-global-shortcut = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-single-instance = "2"
+tauri-plugin-updater = "2"
+tokio = { version = "1", features = ["time"] }
+windows-sys = { version = "0.61", features = ["Win32_UI_Input_KeyboardAndMouse", "Win32_System_SystemInformation"] }
 
 [profile.release]
 codegen-units = 1

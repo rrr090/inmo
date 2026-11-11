@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>INMO</title>
+  <link rel="icon" href="data:,">
 
   <link href="../node_modules/@fontsource/jetbrains-mono/700.css" rel="stylesheet">
   <link href="../node_modules/@fontsource/jetbrains-mono/800.css" rel="stylesheet">
@@ -23,23 +24,10 @@
         <div class="brand-icon"><span data-icon="atom" data-size="18"></span></div>
         <span>INMO</span>
       </div>
-      <div class="nav-link active" onclick="switchPage('timer-page', this)"><span data-icon="timer"></span>Focus Engine</div>
-      <div class="nav-link" onclick="switchPage('analytics-page', this)"><span data-icon="chart-column"></span>Analytics & Charts</div>
-      <div class="nav-link" onclick="switchPage('history-page', this)"><span data-icon="history"></span>Session History</div>
-
-      <div class="setting-row">
-        <div class="setting-row-info">
-          <span class="setting-row-icon" data-icon="picture-in-picture-2"></span>
-          <div>
-            <div class="setting-row-title">Floating Timer</div>
-            <div class="setting-row-desc">Show when minimized</div>
-          </div>
-        </div>
-        <label class="toggle-switch">
-          <input type="checkbox" id="mini-widget-toggle" onchange="window.toggleMiniWidgetSetting(this.checked)">
-          <span class="toggle-slider"></span>
-        </label>
-      </div>
+      <div class="nav-link active" data-page="timer-page" onclick="switchPage('timer-page', this)"><span data-icon="timer"></span>Focus Engine</div>
+      <div class="nav-link" data-page="analytics-page" onclick="switchPage('analytics-page', this)"><span data-icon="chart-column"></span>Analytics & Charts</div>
+      <div class="nav-link" data-page="history-page" onclick="switchPage('history-page', this)"><span data-icon="history"></span>Session History</div>
+      <div class="nav-link" data-page="settings-page" onclick="switchPage('settings-page', this)"><span data-icon="settings"></span>Settings</div>
     </div>
 
     <div class="nav-card" style="flex: 1; min-height: 0;">
@@ -85,18 +73,19 @@
       <div class="timer-section">
         <div class="timer-header-row">
           <div class="mode-selector">
-            <button class="mode-tab active" onclick="setMode('stopwatch', this)">Stopwatch</button>
-            <button class="mode-tab" onclick="setMode('pomodoro', this)">Pomodoro (25m)</button>
+            <button class="mode-tab active" data-mode="stopwatch" onclick="setMode('stopwatch')">Stopwatch</button>
+            <button class="mode-tab" data-mode="pomodoro" onclick="setMode('pomodoro')">Pomodoro (25m)</button>
           </div>
           <div>
-            <span style="font-size: 11px; color: var(--text-sub); font-weight: 700; margin-right: 8px;">TARGET SUBJECT:</span>
-            <select id="global-timer-course-select" class="timer-course-select" onchange="onTimerCourseChange(this.value)"></select>
+            <span class="target-label">TARGET SUBJECT:</span>
+            <span id="timer-course-badge" class="timer-course-badge"></span>
           </div>
         </div>
 
         <div class="time-display" id="timer-display">00:00:00</div>
+        <div class="timer-status" id="timer-status"></div>
 
-        <button class="play-btn" id="timer-btn" title="Start/Stop Timer">
+        <button class="play-btn" id="timer-btn" title="Start" onclick="toggleTimer()">
           <svg id="play-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
         </button>
       </div>
@@ -108,6 +97,7 @@
             <button class="icon-btn" id="subject-menu-btn" onclick="toggleSubjectMenu(event)" title="Subject options" aria-label="Subject options" aria-haspopup="menu" aria-expanded="false"><span data-icon="ellipsis"></span></button>
             <div class="menu is-hidden" id="subject-menu" role="menu">
               <button role="menuitem" onclick="handleResetActiveCourse()"><span data-icon="rotate-ccw" data-size="14"></span>Reset Time</button>
+              <button role="menuitem" onclick="handleArchiveActiveCourse()"><span data-icon="archive" data-size="14"></span>Archive Subject</button>
               <button role="menuitem" class="danger" onclick="handleDeleteActiveCourse()"><span data-icon="trash-2" data-size="14"></span>Delete Subject</button>
             </div>
           </div>
@@ -200,7 +190,11 @@
           <h1 style="margin: 0 0 4px 0; font-size: 24px; font-weight: 800;">Session History</h1>
           <p style="color: var(--text-sub); margin: 0; font-size: 13px;">Log of your recent completed focus sessions.</p>
         </div>
-        <button class="btn-outline" onclick="handleExportCsv()"><span data-icon="download" data-size="14"></span>Export CSV</button>
+        <div class="page-actions">
+          <button class="btn-outline" onclick="openSessionDialog()"><span data-icon="plus" data-size="14"></span>Add session</button>
+          <button class="btn-outline" onclick="handleImportCsv()"><span data-icon="upload" data-size="14"></span>Import CSV</button>
+          <button class="btn-outline" onclick="handleExportCsv()"><span data-icon="download" data-size="14"></span>Export CSV</button>
+        </div>
       </div>
       <div class="section-box" style="padding: 0; overflow: hidden;">
         <table class="history-table">
@@ -214,6 +208,85 @@
           </thead>
           <tbody id="history-table-body"></tbody>
         </table>
+      </div>
+      <button class="btn-outline history-more is-hidden" id="history-more" onclick="showMoreHistory()">Show more</button>
+    </div>
+
+    <!-- PAGE 4: SETTINGS -->
+    <div id="settings-page" class="page">
+      <div>
+        <h1 style="margin: 0 0 4px 0; font-size: 24px; font-weight: 800;">Settings</h1>
+        <p style="color: var(--text-sub); margin: 0; font-size: 13px;">Timer, shortcuts, backups and updates.</p>
+      </div>
+
+      <div class="section-box">
+        <h3>Pomodoro</h3>
+        <p class="section-sub">After each Pomodoro a break starts on its own. Every few Pomodoros the break is a long one.</p>
+        <div class="settings-grid">
+          <label class="setting-field">Focus <span><input type="number" id="setting-pomodoro_focus_min" min="1" max="180" onchange="saveNumberSetting('pomodoro_focus_min', this)"> min</span></label>
+          <label class="setting-field">Short break <span><input type="number" id="setting-pomodoro_short_break_min" min="0" max="120" onchange="saveNumberSetting('pomodoro_short_break_min', this)"> min</span></label>
+          <label class="setting-field">Long break <span><input type="number" id="setting-pomodoro_long_break_min" min="0" max="120" onchange="saveNumberSetting('pomodoro_long_break_min', this)"> min</span></label>
+          <label class="setting-field">Long break after <span><input type="number" id="setting-pomodoro_long_break_every" min="1" max="12" onchange="saveNumberSetting('pomodoro_long_break_every', this)"> Pomodoros</span></label>
+        </div>
+        <p class="section-sub settings-note">A break of 0 minutes skips it. Changes apply from the next Pomodoro.</p>
+      </div>
+
+      <div class="section-box">
+        <h3>Away detection</h3>
+        <p class="section-sub">If the stopwatch runs with no keyboard or mouse activity for this long, inmo asks when you're back whether to keep that time.</p>
+        <div class="settings-grid">
+          <label class="setting-field">Ask after <span><input type="number" id="setting-idle_threshold_min" min="0" max="240" onchange="saveNumberSetting('idle_threshold_min', this)"> min idle</span></label>
+        </div>
+        <p class="section-sub settings-note">0 turns this off. Pomodoros aren't affected: they're a fixed block.</p>
+      </div>
+
+      <div class="section-box settings-toggles">
+        <h3>Desktop</h3>
+        <div class="setting-row">
+          <div class="setting-row-info">
+            <span class="setting-row-icon" data-icon="picture-in-picture-2"></span>
+            <div>
+              <div class="setting-row-title">Floating timer</div>
+              <div class="setting-row-desc">An always-on-top timer while inmo is minimized and a session runs</div>
+            </div>
+          </div>
+          <label class="toggle-switch"><input type="checkbox" id="mini-widget-toggle" onchange="toggleMiniWidgetSetting(this.checked)"><span class="toggle-slider"></span></label>
+        </div>
+        <div class="setting-row">
+          <div class="setting-row-info">
+            <span class="setting-row-icon" data-icon="timer"></span>
+            <div>
+              <div class="setting-row-title">Start/stop shortcut: <span id="shortcut-label">Ctrl+Alt+S</span></div>
+              <div class="setting-row-desc">Works from any app. Starts the subject and mode last picked here.</div>
+            </div>
+          </div>
+          <label class="toggle-switch"><input type="checkbox" id="shortcut-toggle" onchange="toggleShortcut(this)"><span class="toggle-slider"></span></label>
+        </div>
+        <div class="setting-row">
+          <div class="setting-row-info">
+            <span class="setting-row-icon" data-icon="rotate-ccw"></span>
+            <div>
+              <div class="setting-row-title">Start with Windows</div>
+              <div class="setting-row-desc">Opens minimized when you sign in. The tray icon has Start/Stop too.</div>
+            </div>
+          </div>
+          <label class="toggle-switch"><input type="checkbox" id="autostart-toggle" onchange="toggleAutostart(this)"><span class="toggle-slider"></span></label>
+        </div>
+      </div>
+
+      <div class="section-box">
+        <h3>Backups</h3>
+        <p class="section-sub" id="backup-info"></p>
+        <div class="page-actions">
+          <button class="btn-outline" onclick="handleBackupNow()"><span data-icon="save" data-size="14"></span>Back up now</button>
+          <button class="btn-outline" onclick="handleOpenBackups()"><span data-icon="folder-open" data-size="14"></span>Open backups folder</button>
+          <button class="btn-outline" onclick="handleRestoreBackup()"><span data-icon="archive-restore" data-size="14"></span>Restore from backup…</button>
+        </div>
+      </div>
+
+      <div class="section-box">
+        <h3>Updates</h3>
+        <div class="section-sub update-info" id="update-info"></div>
       </div>
     </div>
 
@@ -239,6 +312,6 @@
   </div>
 
   <script src="tauri-api.js"></script>
-  <script type="module" src="stuff.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

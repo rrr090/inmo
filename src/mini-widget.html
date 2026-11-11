@@ -13,7 +13,6 @@
   }
 
   .widget {
-    -webkit-app-region: drag;
     width: 240px;
     height: 84px;
     background: rgba(17, 17, 22, 0.94);
@@ -72,7 +71,6 @@
   }
 
   .stop-btn {
-    -webkit-app-region: no-drag;
     background: rgba(239, 68, 68, 0.15);
     border: 1px solid rgba(239, 68, 68, 0.5);
     color: #ef4444;
@@ -99,21 +97,5 @@
   </div>
 
   <script src="tauri-mini.js"></script>
-  <script>
-    window.miniApi.onTimerState((data) => {
-      document.getElementById('time').innerText = (data && data.timeStr) || '00:00:00';
-      document.getElementById('course').innerText = (data && data.courseLabel) || 'No active subject';
-    });
-
-    document.getElementById('widget').addEventListener('click', (e) => {
-      if (e.target.id === 'stop-btn') return;
-      window.miniApi.restoreMainWindow();
-    });
-
-    document.getElementById('stop-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      window.miniApi.stopTimer();
-    });
-  </script>
 </body>
 </html>
