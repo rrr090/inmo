@@ -98,6 +98,7 @@
     <div class="course" id="course">No active subject</div>
   </div>
 
+  <script src="tauri-mini.js"></script>
   <script>
     window.miniApi.onTimerState((data) => {
       document.getElementById('time').innerText = (data && data.timeStr) || '00:00:00';

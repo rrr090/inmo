@@ -308,14 +308,6 @@ async function saveCourseInfo(courseId) {
   }
 
   try {
-    if (typeof window.api.updateCourse !== 'function') {
-      // Preload doesn't expose an update-course bridge yet - fail loudly instead of
-      // silently reloading the old, unchanged data.
-      console.error('saveCourseInfo: window.api.updateCourse is not available. Add it to preload.js and an "update-course" IPC handler in main.js.');
-      showToast('Could not save changes', { message: 'The app is missing the update-course function.', type: 'error' });
-      return;
-    }
-
     await window.api.updateCourse({ courseId, title: newTitle, code: newCode });
 
     courses = await window.api.getCourses();

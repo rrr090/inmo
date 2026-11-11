@@ -1,4 +1,4 @@
-// Tauri stand-in for src/mini-preload.js.
+// window.miniApi for the floating timer (mini-widget.html).
 (function () {
   const { invoke } = window.__TAURI__.core;
   const { listen } = window.__TAURI__.event;

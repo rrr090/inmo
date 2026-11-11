@@ -88,10 +88,6 @@ typings/
 # Vite
 .vite/
 
-# Electron-Forge
-out/
-dist/
-
-# Tauri spike
+# Tauri build output
 tauri-ui-dist/
 src-tauri/target/

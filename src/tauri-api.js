@@ -1,4 +1,4 @@
-// Tauri stand-in for src/preload.js: gives stuff.js the same window.api it has in Electron.
+// window.api for stuff.js: each call invokes a command in src-tauri/src/lib.rs.
 (function () {
   if (window.api || !window.__TAURI__) return;
   const { invoke } = window.__TAURI__.core;
