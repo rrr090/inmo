@@ -1,4 +1,12 @@
 const { app, BrowserWindow, ipcMain, screen, dialog } = require('electron');
+
+// Only one inmo at a time: a second copy would share the database and the
+// in-progress session row with the first. Launching it again focuses the
+// running window instead (see 'second-instance' below). Exits before the
+// database is opened, so the second copy never touches it.
+if (!app.requestSingleInstanceLock()) {
+  process.exit(0);
+}
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
 
@@ -85,6 +93,13 @@ function sendStatusToWindow(text) {
     mainWindow.webContents.send('update-message', text);
   }
 }
+
+app.on('second-instance', () => {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+});
 
 app.whenReady().then(() => {
   if (app.isPackaged) {

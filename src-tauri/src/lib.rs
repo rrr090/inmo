@@ -1,7 +1,7 @@
 // Tauri port of src/index.js: owns the SQLite database, the floating timer
 // window and the commands behind window.api (see tauri/tauri-api.js).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -37,12 +37,35 @@ fn db_path() -> PathBuf {
     base.join("inmo").join("academic_steam_spotify.db")
 }
 
+// The first time the Tauri build opens a database the Electron build wrote, it
+// keeps a copy in backups/ before changing anything, so the switch can be undone.
+// VACUUM INTO writes a consistent snapshot even if the file is in use.
+fn backup_before_first_tauri_launch(conn: &Connection, db: &Path) {
+    let Some(dir) = db.parent().map(|p| p.join("backups")) else { return };
+    let backup = dir.join("academic_steam_spotify-before-tauri.db");
+    if backup.exists() {
+        return;
+    }
+    let has_data = conn
+        .query_row("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'", [], |r| r.get::<_, i64>(0))
+        .unwrap_or(0)
+        > 0;
+    if !has_data {
+        return;
+    }
+    let _ = std::fs::create_dir_all(&dir);
+    if let Err(e) = conn.execute("VACUUM INTO ?", [backup.to_string_lossy()]) {
+        eprintln!("Backup before first Tauri launch failed: {e}");
+    }
+}
+
 fn open_db() -> rusqlite::Result<Connection> {
     let path = db_path();
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let conn = Connection::open(path)?;
+    let conn = Connection::open(&path)?;
+    backup_before_first_tauri_launch(&conn, &path);
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS courses (
             id TEXT PRIMARY KEY,
@@ -553,12 +576,19 @@ fn stop_timer_from_widget(app: AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let conn = open_db().expect("failed to open the inmo database");
-
     tauri::Builder::default()
+        // Only one inmo at a time: a second copy would share the database and the
+        // in-progress session row with the first. Registered first so a second
+        // launch exits (after focusing the running window) before anything else runs.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| focus_main_window(app)))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
-        .manage(Db(Mutex::new(conn)))
+        // Opened in setup, after the single-instance check, so a second copy never touches it.
+        .setup(|app| {
+            let conn = open_db()?;
+            app.manage(Db(Mutex::new(conn)));
+            Ok(())
+        })
         .on_window_event(|window, event| {
             if window.label() != MAIN_LABEL {
                 return;
@@ -568,12 +598,12 @@ pub fn run() {
                 // Tauri has no minimize event; a resize that leaves the window minimized is one.
                 WindowEvent::Resized(_) => {
                     if window.is_minimized().unwrap_or(false) {
+                        // try_state: the main window exists slightly before setup manages Db.
                         let enabled = app
-                            .state::<Db>()
-                            .0
-                            .lock()
-                            .ok()
-                            .and_then(|conn| get_setting_value(&conn, MINI_WIDGET_SETTING_KEY).ok().flatten());
+                            .try_state::<Db>()
+                            .and_then(|db| db.0.lock().ok().and_then(|conn| {
+                                get_setting_value(&conn, MINI_WIDGET_SETTING_KEY).ok().flatten()
+                            }));
                         if enabled.as_deref() == Some("true") {
                             // Creating a window from inside the event loop's own callback can
                             // deadlock on Windows, so hand it off.
