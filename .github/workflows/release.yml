@@ -15,9 +15,9 @@ jobs:
   release:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -30,8 +30,11 @@ jobs:
 
       - run: npm ci
 
+      # The Rust build embeds tauri-ui-dist/, which isn't in git.
       - name: Tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+        run: |
+          node build-ui.js
+          cargo test --manifest-path src-tauri/Cargo.toml
 
       - uses: tauri-apps/tauri-action@v0
         env:

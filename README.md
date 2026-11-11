@@ -71,6 +71,7 @@ npm start
 Rust unit tests cover the timer, Pomodoro cycles, away detection, crash recovery, manual sessions, CSV import/export and backup restore:
 
 ```bash
+node build-ui.js   # once: the Rust build embeds its output, tauri-ui-dist/
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
