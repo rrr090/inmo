@@ -1,14 +1,11 @@
 // The Analytics page: summary tiles, trend and weekday charts, heatmap, the
 // weekday × hour grid, subject share and per-subject cards with weekly goals.
+// Everything can be narrowed to one term.
 import { showToast } from './notify.js';
 import { state, activeCourses, reloadData } from './state.js';
 import { escapeHtml, formatHM, formatCompact, localDateKey, parseDateKey, addDays, daysBack, fmtDay, weekdayIndex, emptyState, errorText } from './format.js';
+import { SUBJECT_COLORS, OTHER_COLOR, courseColor, allTerms } from './colors.js';
 
-// Subject colors, validated for colorblind separation on the dark card surface.
-// Assigned by a subject's position in the library, so a subject keeps the same
-// color in every chart. Past 8 subjects, the 8th slot becomes "Other".
-const SUBJECT_COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'];
-const OTHER_COLOR = '#6b7280';
 const CHART_SURFACE = '#181820';
 const GRID_COLOR = 'rgba(255,255,255,0.04)';
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -23,6 +20,57 @@ let trendChartInstance = null;
 let weekdayChartInstance = null;
 let editingGoalCourseId = null;
 
+// '' for every subject, NO_TERM for subjects without one, or a term's name.
+// Terms are trimmed when saved, so none can start with a space.
+const NO_TERM = ' none';
+const TERM_KEY = 'inmo.analyticsTerm';
+let analyticsTerm = readSavedTerm();
+
+function readSavedTerm() {
+  try {
+    return localStorage.getItem(TERM_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+// The subjects the page is about: all of them, or one term's.
+function scopeCourses() {
+  if (!analyticsTerm) return state.courses;
+  return state.courses.filter(c => (analyticsTerm === NO_TERM ? !c.term : c.term === analyticsTerm));
+}
+
+function inScope(courseId) {
+  return !analyticsTerm || scopeCourses().some(c => c.id === courseId);
+}
+
+export function setAnalyticsTerm(term) {
+  analyticsTerm = term;
+  try {
+    localStorage.setItem(TERM_KEY, term);
+  } catch {
+    // Not remembered next time; harmless.
+  }
+  renderAnalyticsPage();
+}
+
+function renderTermFilter() {
+  const wrap = document.getElementById('term-filter-wrap');
+  const select = document.getElementById('term-filter');
+  if (!wrap || !select) return;
+  // Archived subjects count too, so past terms stay viewable.
+  const terms = allTerms(state.courses);
+  const hasLoose = state.courses.some(c => !c.term);
+  if (analyticsTerm && analyticsTerm !== NO_TERM && !terms.includes(analyticsTerm)) analyticsTerm = '';
+  if (analyticsTerm === NO_TERM && (!hasLoose || !terms.length)) analyticsTerm = '';
+  wrap.classList.toggle('is-hidden', terms.length === 0);
+  const options = [['', 'All terms'], ...terms.map(t => [t, t])];
+  if (hasLoose && terms.length) options.push([NO_TERM, 'No term']);
+  select.innerHTML = options
+    .map(([value, label]) => `<option value="${escapeHtml(value)}" ${value === analyticsTerm ? 'selected' : ''}>${escapeHtml(label)}</option>`)
+    .join('');
+}
+
 if (window.Chart) {
   Chart.defaults.font.family = "'Plus Jakarta Sans', sans-serif";
   Chart.defaults.color = '#9ca3af';
@@ -33,21 +81,20 @@ function courseCode(courseId) {
   return course ? course.code : 'Deleted subject';
 }
 
+// One series per subject; past 8 subjects, the 8th becomes "Other".
 function subjectSeries() {
-  const named = state.courses.length > SUBJECT_COLORS.length ? SUBJECT_COLORS.length - 1 : state.courses.length;
-  const series = state.courses.slice(0, named).map((c, i) => ({
-    key: c.id, label: c.code, title: c.title, color: SUBJECT_COLORS[i], courseIds: [c.id]
+  const courses = scopeCourses();
+  const named = courses.length > SUBJECT_COLORS.length ? SUBJECT_COLORS.length - 1 : courses.length;
+  const series = courses.slice(0, named).map(c => ({
+    key: c.id, label: c.code, title: c.title, color: courseColor(c), courseIds: [c.id]
   }));
-  if (state.courses.length > named) {
-    const rest = state.courses.slice(named);
+  if (courses.length > named) {
+    const rest = courses.slice(named);
     series.push({ key: 'other', label: 'Other', title: `${rest.length} more subjects`, color: OTHER_COLOR, courseIds: rest.map(c => c.id) });
   }
   return series;
 }
 
-function seriesForCourse(courseId) {
-  return subjectSeries().find(s => s.courseIds.includes(courseId));
-}
 
 // Day key -> { total, byCourse }. A session counts on the day it ended, matching
 // DATE(created_at, 'localtime') used by the dashboard and history.
@@ -75,8 +122,9 @@ function sumDays(dates) {
 export async function renderAnalyticsPage() {
   try {
     const [sessions, taskStats] = await Promise.all([window.api.getSessions(), window.api.getTaskStats()]);
-    analyticsSessions = sessions;
-    analyticsDays = buildDayMap(sessions);
+    renderTermFilter();
+    analyticsSessions = analyticsTerm ? sessions.filter(s => inScope(s.course_id)) : sessions;
+    analyticsDays = buildDayMap(analyticsSessions);
     taskStatsByCourse = new Map(taskStats.map(t => [t.course_id, t]));
   } catch (err) {
     console.error('Failed to load analytics:', err);
@@ -422,7 +470,7 @@ function renderSubjectShare() {
   const el = document.getElementById('subject-share');
   if (!el) return;
 
-  const totalAll = state.courses.reduce((sum, c) => sum + (c.total_seconds || 0), 0);
+  const totalAll = scopeCourses().reduce((sum, c) => sum + (c.total_seconds || 0), 0);
   if (!totalAll) {
     el.innerHTML = emptyState('chart-column', 'Nothing to show yet', 'Each subject\'s share appears after your first session.');
     return;
@@ -601,8 +649,11 @@ function renderSubjectCards() {
   if (!container) return;
   container.innerHTML = '';
 
-  if (activeCourses().length === 0) {
-    container.innerHTML = emptyState('chart-column', 'Nothing to show yet', 'Time per subject appears here once you add one.');
+  const courses = activeCourses().filter(c => inScope(c.id));
+  if (courses.length === 0) {
+    container.innerHTML = analyticsTerm
+      ? emptyState('chart-column', 'No subjects in this term', 'Its subjects may all be archived. Pick "All terms" to see everything.')
+      : emptyState('chart-column', 'Nothing to show yet', 'Time per subject appears here once you add one.');
     return;
   }
 
@@ -614,8 +665,7 @@ function renderSubjectCards() {
     day.byCourse.forEach((secs, id) => weekByCourse.set(id, (weekByCourse.get(id) || 0) + secs));
   });
 
-  activeCourses().forEach(c => {
-    const series = seriesForCourse(c.id);
+  courses.forEach(c => {
     const goal = c.weekly_goal_seconds || 0;
     const week = weekByCourse.get(c.id) || 0;
     const tasks = taskStatsByCourse.get(c.id) || {};
@@ -664,7 +714,7 @@ function renderSubjectCards() {
     card.className = 'stat-card subject-card';
     card.innerHTML = `
       <div class="subject-card-head">
-        <span class="swatch" style="background: ${series.color};"></span>
+        <span class="swatch" style="background: ${courseColor(c)};"></span>
         <h3>${escapeHtml(c.code)}</h3>
       </div>
       <div class="card-title" title="${escapeHtml(c.title)}">${escapeHtml(c.title)}</div>

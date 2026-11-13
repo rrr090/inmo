@@ -4,6 +4,7 @@
 import { showToast, confirmDialog } from './notify.js';
 import { state, getActiveCourse, reloadData } from './state.js';
 import { escapeHtml, formatClock, formatDuration, errorText } from './format.js';
+import { renderWorkingOn } from './tasks.js';
 
 const PLAY_ICON = '<path d="M8 5v14l11-7z"/>';
 const STOP_ICON = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
@@ -62,13 +63,15 @@ function applySnapshot(snap) {
   // Mode can't change mid-session.
   document.querySelectorAll('.mode-tab').forEach(tab => { tab.disabled = running && !onBreak; });
 
+  renderWorkingOn();
+
   updateInPageWidget();
 }
 
 async function handleTimerEvent(ev) {
   switch (ev.kind) {
     case 'stopped':
-      if (ev.saved) showToast('Session saved', { message: `${formatDuration(ev.duration)} added to ${ev.courseCode} — ${ev.courseTitle}` });
+      if (ev.saved) showToast('Session saved', { message: `${formatDuration(ev.duration)} added to ${ev.courseCode} — ${ev.courseTitle}${ev.taskText ? ` · ${ev.taskText}` : ''}` });
       else showToast('Session not saved', { message: 'Sessions of 30 seconds or less aren\'t logged.', type: 'info' });
       await reloadData();
       break;

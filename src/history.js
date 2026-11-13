@@ -4,6 +4,7 @@ import { icon } from './icons.js';
 import { showToast, showUndoToast } from './notify.js';
 import { state, activeCourses, courseById, reloadData } from './state.js';
 import { escapeHtml, formatHM, formatDuration, localDateKey, localTimeKey, emptyState, errorText } from './format.js';
+import { swatch } from './colors.js';
 
 const PAGE = 50;
 let shown = PAGE;
@@ -29,14 +30,18 @@ export async function renderHistory() {
 
   if (rows.length === 0) {
     tbody.innerHTML = search
-      ? `<tr class="empty-row"><td colspan="4">${emptyState('history', 'No matching sessions', `Nothing in notes or subject names matches "${search}".`)}</td></tr>`
+      ? `<tr class="empty-row"><td colspan="4">${emptyState('history', 'No matching sessions', `Nothing in notes, tasks or subject names matches "${search}".`)}</td></tr>`
       : `<tr class="empty-row"><td colspan="4">${emptyState('history', 'No sessions yet', 'Finished study sessions are listed here. Studied without the timer? Add the session by hand.')}</td></tr>`;
     return;
   }
   tbody.innerHTML = rows.map(row => `
     <tr>
       <td>${escapeHtml(row.created_at)}</td>
-      <td><b>${escapeHtml(row.code)}</b> - ${escapeHtml(row.title)}${row.note ? `<div class="history-note">${escapeHtml(row.note)}</div>` : ''}</td>
+      <td>
+        <span class="history-subject">${swatch(courseById(row.course_id))}<b>${escapeHtml(row.code)}</b> - ${escapeHtml(row.title)}</span>
+        ${row.task_text ? `<div class="history-task">${icon('target', 12)}${escapeHtml(row.task_text)}</div>` : ''}
+        ${row.note ? `<div class="history-note">${escapeHtml(row.note)}</div>` : ''}
+      </td>
       <td class="history-duration">${formatHM(row.duration)}</td>
       <td class="history-actions">
         <button class="delete-item-btn" onclick="window.openSessionDialog(${row.id})" title="Edit session" aria-label="Edit session">${icon('pencil', 15)}</button>

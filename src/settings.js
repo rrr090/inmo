@@ -24,6 +24,7 @@ const TOGGLE_SETTINGS = {
   notify_away: true,
   notify_session: true,
   pomodoro_sound: true,
+  weekly_review: true,
 };
 
 async function readToggle(key) {

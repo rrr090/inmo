@@ -91,6 +91,15 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         "ALTER TABLE active_session ADD COLUMN note TEXT",
         "ALTER TABLE courses ADD COLUMN exam_date TEXT",
         "ALTER TABLE courses ADD COLUMN exam_target_seconds INTEGER DEFAULT 0",
+        // 1.3: terms and colors for subjects; due dates, order and completion
+        // time for tasks; the task a session was spent on.
+        "ALTER TABLE courses ADD COLUMN term TEXT",
+        "ALTER TABLE courses ADD COLUMN color TEXT",
+        "ALTER TABLE tasks ADD COLUMN due_date TEXT",
+        "ALTER TABLE tasks ADD COLUMN position INTEGER",
+        "ALTER TABLE tasks ADD COLUMN completed_at INTEGER",
+        "ALTER TABLE study_sessions ADD COLUMN task_id TEXT",
+        "ALTER TABLE active_session ADD COLUMN task_id TEXT",
     ] {
         if let Err(e) = conn.execute(sql, []) {
             if !e.to_string().to_lowercase().contains("duplicate column") {

@@ -16,6 +16,10 @@ A desktop study tracker for university courses. Time your study sessions per sub
 - **Away detection:** if the stopwatch runs with no keyboard or mouse activity for a while (10 minutes by default), inmo asks when you're back whether to keep that time.
 - **Tray and shortcut:** start or stop the timer from the tray icon or with Ctrl+Alt+S from any app. inmo can start with Windows, and the close button can send it to the tray instead of quitting.
 - **Subjects and tasks:** add, edit and archive courses, each with its own to-do list. Archived subjects keep their history and still count in analytics.
+- **Terms and colors:** put subjects in a term ("Fall 2026") to group the library, folding away old terms, and show one term at a time in Analytics. Each subject can have its own color, used in the library, the timer, history and every chart.
+- **Better tasks:** due dates, drag (or arrow-key) reordering, and a "Due soon" list across all subjects on the Timer page. Pick a task to work on and the sessions are logged against it: each task shows the time spent on it, and History shows and searches it.
+- **Weekly review:** the first time you open inmo each week, a look back at last week: hours per day against your daily goal, each subject against its weekly goal, tasks done, and exams and due tasks coming up. Also on the Analytics page, for any week.
+- **Keyboard shortcuts:** Space starts and stops the timer, Ctrl+1 to Ctrl+4 switch pages, Alt+↑/↓ changes subject, and single keys add a task, a subject or a note. Press ? for the list.
 - **Analytics:** a 7/30/90-day focus trend (total or split by subject) with daily average, goal and previous-period lines, summary stats, week-over-week comparison, a 90-day activity heatmap, each subject's share of your time, weekday averages and a weekday × hour grid of when you study.
 - **Goals and streaks:** a daily target (2 hours unless you change it), optional weekly goals per subject, a running study streak and your longest streak ever.
 - **Session notes:** type what you're working on under the timer, and it's saved with the session. History shows the notes and can search them, along with subject names.
@@ -71,7 +75,7 @@ npm install
 npm start
 ```
 
-Rust unit tests cover the timer, Pomodoro cycles, away detection, crash recovery, manual sessions, notes and search, undo, CSV import/export and backup restore. They also run on every push (the CI workflow):
+Rust unit tests cover the timer, Pomodoro cycles, away detection, crash recovery, manual sessions, notes and search, tasks (order, due dates, time per task), undo, CSV import/export and backup restore. They also run on every push (the CI workflow):
 
 ```bash
 node build-ui.js   # once: the Rust build embeds its output, tauri-ui-dist/

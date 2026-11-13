@@ -4,6 +4,7 @@ import { icon } from './icons.js';
 import { showToast } from './notify.js';
 import { activeCourses, courseById, reloadData } from './state.js';
 import { escapeHtml, formatCompact, localDateKey, parseDateKey, fmtDay, errorText } from './format.js';
+import { swatch } from './colors.js';
 
 const DAY_MS = 86400000;
 
@@ -74,7 +75,7 @@ export function renderExams() {
           <span class="exam-date">${escapeHtml(fmtDay(parseDateKey(c.exam_date), true))}</span>
         </div>
         <div class="exam-body">
-          <div class="exam-title"><b>${escapeHtml(c.code)}</b> — ${escapeHtml(c.title)}</div>
+          <div class="exam-title">${swatch(c)}<b>${escapeHtml(c.code)}</b> — ${escapeHtml(c.title)}</div>
           ${paceHtml}
         </div>
         <button class="icon-btn" title="Edit exam" aria-label="Edit exam" onclick="window.openExamDialog('${id}')">${icon('pencil', 14)}</button>

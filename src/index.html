@@ -85,7 +85,12 @@
         <div class="time-display" id="timer-display">00:00:00</div>
         <div class="timer-status" id="timer-status"></div>
         <input type="text" id="session-note" class="session-note" maxlength="500" placeholder="What are you working on? (optional)"
-          aria-label="What you're working on" oninput="handleNoteInput(this)" onblur="saveNote(this)" onkeydown="if (event.key === 'Enter') this.blur()">
+          aria-label="What you're working on" oninput="handleNoteInput(this)" onblur="saveNote(this)" onkeydown="if (event.key === 'Enter' || event.key === 'Escape') this.blur()">
+        <div class="working-on is-hidden" id="working-on">
+          <span data-icon="target" data-size="14"></span>
+          <span>Working on <b id="working-on-text"></b></span>
+          <button class="icon-btn" onclick="clearWorkingOn()" title="Stop working on this task" aria-label="Stop working on this task"><span data-icon="x" data-size="13"></span></button>
+        </div>
 
         <button class="play-btn" id="timer-btn" title="Start" onclick="toggleTimer()">
           <svg id="play-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
@@ -95,6 +100,11 @@
       <div class="section-box is-hidden" id="exams-box">
         <h3 class="label-with-icon"><span data-icon="calendar" data-size="16"></span>Upcoming exams</h3>
         <div id="exams-list"></div>
+      </div>
+
+      <div class="section-box is-hidden" id="due-box">
+        <h3 class="label-with-icon"><span data-icon="calendar-check" data-size="16"></span>Due soon</h3>
+        <div id="due-list"></div>
       </div>
 
       <div class="section-box" id="active-course-todos-box">
@@ -111,7 +121,8 @@
           </div>
         </div>
         <div class="task-input-row">
-          <input type="text" id="new-task-text" placeholder="Add a task for this subject..." onkeydown="if(event.key==='Enter') handleAddTask()">
+          <input type="text" id="new-task-text" maxlength="300" placeholder="Add a task for this subject..." onkeydown="if (event.key === 'Enter') handleAddTask(); if (event.key === 'Escape') this.blur();">
+          <input type="date" id="new-task-due" class="task-due-input" title="Due date (optional)" aria-label="Due date (optional)" onkeydown="if (event.key === 'Enter') handleAddTask()">
           <button onclick="handleAddTask()">Add Task</button>
         </div>
         <div class="task-list" id="task-list"></div>
@@ -126,8 +137,15 @@
           <h1 style="margin: 0 0 4px 0; font-size: 24px; font-weight: 800;">Analytics & Performance Charts</h1>
           <p style="color: var(--text-sub); margin: 0; font-size: 13px;">Visual trends, weekly comparison, and focus consistency.</p>
         </div>
-        <div id="weekly-comparison-badge" style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700;">
-          Week-over-Week: <span style="color: var(--accent);">+0%</span>
+        <div class="page-actions analytics-actions">
+          <label class="term-filter is-hidden" id="term-filter-wrap">
+            <span>Term</span>
+            <select id="term-filter" onchange="setAnalyticsTerm(this.value)" aria-label="Show one term"></select>
+          </label>
+          <button class="btn-outline" onclick="openWeeklyReview()"><span data-icon="calendar-check" data-size="14"></span>Weekly review</button>
+          <div id="weekly-comparison-badge" style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700;">
+            Week-over-Week: <span style="color: var(--accent);">+0%</span>
+          </div>
         </div>
       </div>
       
@@ -206,7 +224,7 @@
       </div>
       <label class="history-search">
         <span data-icon="search" data-size="14"></span>
-        <input type="search" id="history-search" placeholder="Search notes and subjects" aria-label="Search sessions" oninput="handleHistorySearch(this)">
+        <input type="search" id="history-search" placeholder="Search notes, tasks and subjects" aria-label="Search sessions" oninput="handleHistorySearch(this)">
       </label>
       <div class="section-box" style="padding: 0; overflow: hidden;">
         <table class="history-table">
@@ -308,6 +326,21 @@
         </div>
       </div>
 
+      <div class="section-box settings-toggles">
+        <h3>Weekly review</h3>
+        <p class="section-sub">A look back at last week: hours against your goals, each subject, tasks done, and what's coming up. It's also on the Analytics page, any time.</p>
+        <div class="setting-row">
+          <div class="setting-row-info">
+            <span class="setting-row-icon" data-icon="calendar-check"></span>
+            <div>
+              <div class="setting-row-title">Show it at the start of each week</div>
+              <div class="setting-row-desc">The first time you open inmo from Monday on, if you studied the week before</div>
+            </div>
+          </div>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-weekly_review" onchange="saveToggleSetting('weekly_review', this.checked)"><span class="toggle-slider"></span></label>
+        </div>
+      </div>
+
       <div class="section-box">
         <h3>Away detection</h3>
         <p class="section-sub">If the stopwatch runs with no keyboard or mouse activity for this long, inmo asks when you're back whether to keep that time.</p>
@@ -362,6 +395,14 @@
       </div>
 
       <div class="section-box">
+        <h3>Keyboard shortcuts</h3>
+        <p class="section-sub">Space starts and stops the timer, Ctrl+1 to Ctrl+4 switch pages, Alt+↑ and Alt+↓ change subject. Press <kbd>?</kbd> anywhere for the full list.</p>
+        <div class="page-actions">
+          <button class="btn-outline" onclick="openShortcutHelp()"><span data-icon="keyboard" data-size="14"></span>Show all shortcuts</button>
+        </div>
+      </div>
+
+      <div class="section-box">
         <h3>Backups</h3>
         <p class="section-sub" id="backup-info"></p>
         <div class="page-actions">
@@ -389,25 +430,6 @@
       </div>
     </div>
 
-  </div>
-
-  <!-- MODAL: ADD SUBJECT -->
-  <div class="modal-overlay" id="modal">
-    <div class="modal">
-      <h2>Add New Subject</h2>
-      <div class="form-group">
-        <label>Subject Title</label>
-        <input type="text" id="modal-title" placeholder="e.g. Database Systems">
-      </div>
-      <div class="form-group">
-        <label>Course Code</label>
-        <input type="text" id="modal-code" placeholder="e.g. CS2050">
-      </div>
-      <div class="modal-actions">
-        <button class="btn-secondary" onclick="closeModal()">Cancel</button>
-        <button class="btn-primary" onclick="handleAddCourse()">Add Subject</button>
-      </div>
-    </div>
   </div>
 
   <script src="tauri-api.js"></script>

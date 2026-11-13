@@ -96,6 +96,9 @@ pub struct TimerState {
     // What the session is spent on, typed on the Timer page. Kept through a
     // Pomodoro cycle; a manual stop clears it.
     pub note: Option<String>,
+    // The to-do item the session is spent on, if one was picked. Same lifetime
+    // as the note, and always a task of the session's subject.
+    pub task_id: Option<String>,
 }
 
 impl Default for TimerState {
@@ -113,6 +116,7 @@ impl Default for TimerState {
             last_heartbeat_ms: 0,
             away: None,
             note: None,
+            task_id: None,
         }
     }
 }
@@ -177,6 +181,7 @@ impl TimerState {
             "longBreakEvery": every,
             "awaySecs": self.away.and_then(|a| a.back_ms.map(|b| (b - a.from_ms) / 1000)),
             "note": self.note,
+            "taskId": self.task_id,
         })
     }
 }
@@ -190,11 +195,26 @@ fn course_info(conn: &Connection, course_id: &str) -> rusqlite::Result<Option<(S
     .optional()
 }
 
-pub fn save_session(conn: &mut Connection, course_id: &str, duration: i64, note: Option<&str>) -> rusqlite::Result<()> {
+// Whether a task exists and belongs to this subject.
+fn task_of_course(conn: &Connection, task_id: &str, course_id: &str) -> bool {
+    conn.query_row("SELECT 1 FROM tasks WHERE id = ? AND course_id = ?", [task_id, course_id], |_| Ok(()))
+        .optional()
+        .ok()
+        .flatten()
+        .is_some()
+}
+
+pub fn save_session(
+    conn: &mut Connection,
+    course_id: &str,
+    duration: i64,
+    note: Option<&str>,
+    task_id: Option<&str>,
+) -> rusqlite::Result<()> {
     let tx = conn.transaction()?;
     tx.execute(
-        "INSERT INTO study_sessions (course_id, duration, note) VALUES (?, ?, ?)",
-        params![course_id, duration, note],
+        "INSERT INTO study_sessions (course_id, duration, note, task_id) VALUES (?, ?, ?, ?)",
+        params![course_id, duration, note, task_id],
     )?;
     tx.execute("UPDATE courses SET total_seconds = total_seconds + ? WHERE id = ?", params![duration, course_id])?;
     tx.commit()
@@ -217,15 +237,20 @@ pub fn start(state: &mut TimerState, conn: &Connection, course_id: &str, mode: M
     if archived {
         return Err("That subject is archived. Restore it to time it again.".into());
     }
+    // A task picked for another subject doesn't carry over.
+    if state.task_id.as_deref().is_some_and(|t| !task_of_course(conn, t, course_id)) {
+        state.task_id = None;
+    }
     // Record the session right away so a crash or power cut can't lose it.
     conn.execute(
-        "INSERT INTO active_session (id, course_id, start_timestamp, mode, last_heartbeat, note) VALUES (1, ?, ?, ?, ?, ?)
+        "INSERT INTO active_session (id, course_id, start_timestamp, mode, last_heartbeat, note, task_id) VALUES (1, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET course_id = excluded.course_id,
                                        start_timestamp = excluded.start_timestamp,
                                        mode = excluded.mode,
                                        last_heartbeat = excluded.last_heartbeat,
-                                       note = excluded.note",
-        params![course_id, now, mode.as_str(), now, state.note],
+                                       note = excluded.note,
+                                       task_id = excluded.task_id",
+        params![course_id, now, mode.as_str(), now, state.note, state.task_id],
     )
     .map_err(db::err)?;
 
@@ -245,7 +270,10 @@ pub fn start(state: &mut TimerState, conn: &Connection, course_id: &str, mode: M
     Ok(())
 }
 
-fn session_event(kind: &str, state: &TimerState, saved: bool, duration: i64) -> Value {
+fn session_event(kind: &str, state: &TimerState, conn: &Connection, saved: bool, duration: i64) -> Value {
+    let task_text: Option<String> = state.task_id.as_ref().and_then(|t| {
+        conn.query_row("SELECT text FROM tasks WHERE id = ?", [t], |r| r.get(0)).optional().ok().flatten()
+    });
     json!({
         "kind": kind,
         "saved": saved,
@@ -253,6 +281,7 @@ fn session_event(kind: &str, state: &TimerState, saved: bool, duration: i64) -> 
         "courseId": state.course_id,
         "courseCode": state.course_code,
         "courseTitle": state.course_title,
+        "taskText": task_text,
     })
 }
 
@@ -274,12 +303,15 @@ pub fn stop(state: &mut TimerState, conn: &mut Connection, now: i64) -> Result<V
             let saved = duration > MIN_SESSION_SECS;
             if saved {
                 let course_id = state.course_id.clone().unwrap_or_default();
-                save_session(conn, &course_id, duration, state.note.as_deref()).map_err(db::err)?;
+                save_session(conn, &course_id, duration, state.note.as_deref(), state.task_id.as_deref())
+                    .map_err(db::err)?;
             }
+            let event = session_event("stopped", state, conn, saved, duration);
             state.phase = Phase::Idle;
             state.away = None;
             state.note = None;
-            session_event("stopped", state, saved, duration)
+            state.task_id = None;
+            event
         }
     };
     state.target_secs = 0;
@@ -295,6 +327,7 @@ pub fn cancel(state: &mut TimerState, conn: &Connection) {
     state.target_secs = 0;
     state.away = None;
     state.note = None;
+    state.task_id = None;
 }
 
 // Sets what the session is spent on, and records it for crash recovery.
@@ -305,6 +338,26 @@ pub fn set_note(state: &mut TimerState, conn: &Connection, note: Option<String>)
         }
     }
     state.note = note;
+}
+
+// Sets the task the session is spent on (None to clear it). `course_id` is the
+// subject it's picked for: the running one, or the one about to be started.
+pub fn set_task(state: &mut TimerState, conn: &Connection, task_id: Option<String>, course_id: &str) -> Result<(), String> {
+    if state.phase == Phase::Focus && state.course_id.as_deref() != Some(course_id) {
+        return Err("The timer is running on another subject".into());
+    }
+    if let Some(t) = &task_id {
+        if !task_of_course(conn, t, course_id) {
+            return Err("That task no longer exists".into());
+        }
+    }
+    if state.phase == Phase::Focus {
+        if let Err(e) = conn.execute("UPDATE active_session SET task_id = ? WHERE id = 1", [&task_id]) {
+            eprintln!("Failed to record the task: {e}");
+        }
+    }
+    state.task_id = task_id;
+    Ok(())
 }
 
 // Advances the timer to `now`. `idle_ms` is how long since the last keyboard or
@@ -325,14 +378,15 @@ pub fn tick(state: &mut TimerState, conn: &mut Connection, now: i64, idle_ms: Op
                 let duration = state.target_secs;
                 clear_active(conn);
                 let course_id = state.course_id.clone().unwrap_or_default();
-                let saved = save_session(conn, &course_id, duration, state.note.as_deref()).is_ok();
+                let saved =
+                    save_session(conn, &course_id, duration, state.note.as_deref(), state.task_id.as_deref()).is_ok();
                 state.pomodoros_done += 1;
                 let every = setting_i64(conn, LONG_BREAK_EVERY.0, LONG_BREAK_EVERY.1, 1, 12);
                 let long = state.pomodoros_done % every == 0;
                 let (key, default) = if long { LONG_BREAK_MIN } else { SHORT_BREAK_MIN };
                 let break_secs = setting_i64(conn, key, default, 0, 120) * 60;
 
-                let mut ev = session_event("pomodoro-complete", state, saved, duration);
+                let mut ev = session_event("pomodoro-complete", state, conn, saved, duration);
                 ev["breakSecs"] = json!(break_secs);
                 ev["longBreak"] = json!(long);
 
@@ -423,16 +477,17 @@ pub fn resolve_idle(state: &mut TimerState, conn: &Connection, keep: bool) -> Re
 // Called once at launch: a session left open by a crash is closed at its last
 // heartbeat, so time with the app closed isn't credited, and written to history.
 pub fn recover(conn: &mut Connection, now: i64) -> rusqlite::Result<Value> {
-    let row: Option<(Option<String>, Option<i64>, Option<String>, Option<i64>, Option<String>)> = conn
+    type Row = (Option<String>, Option<i64>, Option<String>, Option<i64>, Option<String>, Option<String>);
+    let row: Option<Row> = conn
         .query_row(
-            "SELECT course_id, start_timestamp, mode, last_heartbeat, note FROM active_session WHERE id = 1",
+            "SELECT course_id, start_timestamp, mode, last_heartbeat, note, task_id FROM active_session WHERE id = 1",
             [],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
         )
         .optional()?;
 
-    let (course_id, start, mode, heartbeat, note) = match row {
-        Some((Some(c), Some(s), m, h, n)) if s != 0 => (c, s, m, h, n),
+    let (course_id, start, mode, heartbeat, note, task_id) = match row {
+        Some((Some(c), Some(s), m, h, n, t)) if s != 0 => (c, s, m, h, n, t),
         _ => return Ok(json!({ "recovered": false })),
     };
 
@@ -460,8 +515,8 @@ pub fn recover(conn: &mut Connection, now: i64) -> rusqlite::Result<Value> {
     let tx = conn.transaction()?;
     // Logged at the time it ended, not at the time inmo was next opened.
     tx.execute(
-        "INSERT INTO study_sessions (course_id, duration, note, created_at) VALUES (?, ?, ?, datetime(?, 'unixepoch'))",
-        params![course_id, duration, note, start / 1000 + duration],
+        "INSERT INTO study_sessions (course_id, duration, note, task_id, created_at) VALUES (?, ?, ?, ?, datetime(?, 'unixepoch'))",
+        params![course_id, duration, note, task_id, start / 1000 + duration],
     )?;
     tx.execute("UPDATE courses SET total_seconds = total_seconds + ? WHERE id = ?", params![duration, course_id])?;
     tx.execute("DELETE FROM active_session WHERE id = 1", [])?;
@@ -821,6 +876,39 @@ mod tests {
         stop(&mut s, &mut conn, T0 + 290_000).unwrap();
         assert_eq!(last_note(&conn).as_deref(), Some("Exercises"));
         assert_eq!(s.note, None);
+    }
+
+    fn last_task(conn: &Connection) -> Option<String> {
+        conn.query_row("SELECT task_id FROM study_sessions ORDER BY id DESC LIMIT 1", [], |r| r.get(0)).unwrap()
+    }
+
+    #[test]
+    fn sessions_remember_their_task() {
+        let mut conn = conn_with_course();
+        conn.execute_batch(
+            "INSERT INTO courses (id, title, code) VALUES ('c2', 'Biology', 'BI1');
+             INSERT INTO tasks (id, course_id, text) VALUES ('t1', 'c1', 'Problem set 3');
+             INSERT INTO tasks (id, course_id, text) VALUES ('t2', 'c2', 'Lab report');",
+        )
+        .unwrap();
+        let mut s = TimerState::default();
+        assert!(set_task(&mut s, &conn, Some("t2".into()), "c1").is_err(), "another subject's task");
+        set_task(&mut s, &conn, Some("t1".into()), "c1").unwrap();
+        start(&mut s, &conn, "c1", Mode::Stopwatch, T0).unwrap();
+        stop(&mut s, &mut conn, T0 + 120_000).unwrap();
+        assert_eq!(last_task(&conn).as_deref(), Some("t1"));
+        assert_eq!(s.task_id, None, "a manual stop clears it");
+
+        // Picked while idle, then the timer starts on a different subject: dropped.
+        set_task(&mut s, &conn, Some("t1".into()), "c1").unwrap();
+        start(&mut s, &conn, "c2", Mode::Stopwatch, T0 + 200_000).unwrap();
+        assert_eq!(s.task_id, None);
+        assert!(set_task(&mut s, &conn, Some("t1".into()), "c1").is_err(), "running on c2");
+        set_task(&mut s, &conn, Some("t2".into()), "c2").unwrap();
+        // Crash: recovery keeps the task.
+        tick(&mut s, &mut conn, T0 + 260_000, None);
+        recover(&mut conn, T0 + 900_000).unwrap();
+        assert_eq!(last_task(&conn).as_deref(), Some("t2"));
     }
 
     #[test]

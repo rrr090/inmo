@@ -31,16 +31,42 @@ pub fn get_courses(db: State<'_, Db>) -> CmdResult<Vec<Value>> {
     query_json(&conn, "SELECT * FROM courses ORDER BY rowid", &[]).map_err(err)
 }
 
+pub const MAX_TERM_CHARS: usize = 40;
+
+// A term name ("Fall 2026"), trimmed; empty means none.
+pub fn clean_term(term: Option<&str>) -> Option<String> {
+    let term = term?.trim();
+    (!term.is_empty()).then(|| term.chars().take(MAX_TERM_CHARS).collect())
+}
+
+// A subject color is "#rrggbb", or none for the automatic one.
+pub fn clean_color(color: Option<&str>) -> Result<Option<String>, String> {
+    let Some(c) = color.map(str::trim).filter(|c| !c.is_empty()) else { return Ok(None) };
+    let hex = c.strip_prefix('#').unwrap_or("");
+    if hex.len() == 6 && hex.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        Ok(Some(c.to_lowercase()))
+    } else {
+        Err("Pick a color like #3987e5".into())
+    }
+}
+
 #[tauri::command(async)]
-pub fn add_course(db: State<'_, Db>, title: String, code: String) -> CmdResult<Value> {
+pub fn add_course(
+    db: State<'_, Db>,
+    title: String,
+    code: String,
+    term: Option<String>,
+    color: Option<String>,
+) -> CmdResult<Value> {
     let conn = db.0.lock().map_err(err)?;
+    let (term, color) = (clean_term(term.as_deref()), clean_color(color.as_deref())?);
     let id = new_id(&conn, "courses");
     conn.execute(
-        "INSERT INTO courses (id, title, code, total_seconds) VALUES (?, ?, ?, 0)",
-        params![id, title, code],
+        "INSERT INTO courses (id, title, code, total_seconds, term, color) VALUES (?, ?, ?, 0, ?, ?)",
+        params![id, title, code, term, color],
     )
     .map_err(err)?;
-    Ok(json!({ "id": id, "title": title, "code": code, "total_seconds": 0 }))
+    Ok(json!({ "id": id, "title": title, "code": code, "total_seconds": 0, "term": term, "color": color }))
 }
 
 // Millisecond timestamps as ids, like the Electron build, bumped if two land in the same ms.
@@ -54,12 +80,23 @@ fn new_id(conn: &Connection, table: &str) -> String {
 }
 
 #[tauri::command(async)]
-pub fn update_course(db: State<'_, Db>, course_id: String, title: String, code: String) -> CmdResult<Value> {
+pub fn update_course(
+    db: State<'_, Db>,
+    course_id: String,
+    title: String,
+    code: String,
+    term: Option<String>,
+    color: Option<String>,
+) -> CmdResult<Value> {
     let conn = db.0.lock().map_err(err)?;
+    let (term, color) = (clean_term(term.as_deref()), clean_color(color.as_deref())?);
     let changes = conn
-        .execute("UPDATE courses SET title = ?, code = ? WHERE id = ?", params![title, code, course_id])
+        .execute(
+            "UPDATE courses SET title = ?, code = ?, term = ?, color = ? WHERE id = ?",
+            params![title, code, term, color, course_id],
+        )
         .map_err(err)?;
-    Ok(json!({ "success": true, "changes": changes, "id": course_id, "title": title, "code": code }))
+    Ok(json!({ "success": true, "changes": changes, "id": course_id, "title": title, "code": code, "term": term, "color": color }))
 }
 
 // Deletes a subject with its tasks and sessions; returns them for Undo.
@@ -131,13 +168,7 @@ pub fn reset_course_time(db: State<'_, Db>, trash: State<'_, Trash>, course_id: 
 #[tauri::command(async)]
 pub fn set_course_exam(db: State<'_, Db>, course_id: String, date: Option<String>, target_hours: f64) -> CmdResult<Value> {
     let conn = db.0.lock().map_err(err)?;
-    let date = date.map(|d| d.trim().to_string()).filter(|d| !d.is_empty());
-    if let Some(d) = &date {
-        let valid: Option<String> = conn.query_row("SELECT date(?)", [d], |r| r.get(0)).map_err(err)?;
-        if valid.as_deref() != Some(d.as_str()) {
-            return Err("Pick a valid date".into());
-        }
-    }
+    let date = clean_date(&conn, date.as_deref())?;
     if !target_hours.is_finite() || !(0.0..=2000.0).contains(&target_hours) {
         return Err("The target must be between 0 and 2000 hours".into());
     }
@@ -148,6 +179,16 @@ pub fn set_course_exam(db: State<'_, Db>, course_id: String, date: Option<String
     )
     .map_err(err)?;
     Ok(json!({ "success": true }))
+}
+
+// A YYYY-MM-DD date, trimmed; empty means none.
+pub fn clean_date(conn: &Connection, date: Option<&str>) -> Result<Option<String>, String> {
+    let Some(d) = date.map(str::trim).filter(|d| !d.is_empty()) else { return Ok(None) };
+    let valid: Option<String> = conn.query_row("SELECT date(?)", [d], |r| r.get(0)).map_err(err)?;
+    if valid.as_deref() != Some(d) {
+        return Err("Pick a valid date".into());
+    }
+    Ok(Some(d.to_string()))
 }
 
 #[tauri::command(async)]
@@ -173,15 +214,17 @@ pub fn history_rows(conn: &Connection, limit: i64, search: &str) -> CmdResult<Va
     let limit = limit.clamp(1, 100_000);
     let search = search.trim();
     let pattern = format!("%{}%", search.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_"));
-    let filter = "(?1 = '' OR s.note LIKE ?2 ESCAPE '\\' OR c.title LIKE ?2 ESCAPE '\\' OR c.code LIKE ?2 ESCAPE '\\')";
+    let filter = "(?1 = '' OR s.note LIKE ?2 ESCAPE '\\' OR c.title LIKE ?2 ESCAPE '\\' OR c.code LIKE ?2 ESCAPE '\\'
+                   OR t.text LIKE ?2 ESCAPE '\\')";
     let rows = query_json(
         conn,
         &format!(
-            "SELECT s.id, s.course_id, c.title, c.code, s.duration, s.note,
+            "SELECT s.id, s.course_id, c.title, c.code, s.duration, s.note, s.task_id, t.text AS task_text,
                     strftime('%d.%m.%Y, %H:%M', s.created_at, 'localtime') AS created_at,
                     CAST(strftime('%s', s.created_at) AS INTEGER) AS ended_at
              FROM study_sessions s
              JOIN courses c ON s.course_id = c.id
+             LEFT JOIN tasks t ON s.task_id = t.id
              WHERE {filter}
              ORDER BY s.created_at DESC, s.id DESC LIMIT ?3"
         ),
@@ -190,7 +233,10 @@ pub fn history_rows(conn: &Connection, limit: i64, search: &str) -> CmdResult<Va
     .map_err(err)?;
     let total: i64 = conn
         .query_row(
-            &format!("SELECT COUNT(*) FROM study_sessions s JOIN courses c ON s.course_id = c.id WHERE {filter}"),
+            &format!(
+                "SELECT COUNT(*) FROM study_sessions s JOIN courses c ON s.course_id = c.id
+                 LEFT JOIN tasks t ON s.task_id = t.id WHERE {filter}"
+            ),
             params![search, pattern],
             |r| r.get(0),
         )
@@ -275,7 +321,10 @@ pub fn update_session_at(
     tx.execute("UPDATE courses SET total_seconds = total_seconds + ? WHERE id = ?", params![duration, course_id])
         .map_err(err)?;
     tx.execute(
-        "UPDATE study_sessions SET course_id = ?, duration = ?, created_at = datetime(?, 'unixepoch'), note = ? WHERE id = ?",
+        // Moved to another subject, it can't stay on a task of the old one.
+        "UPDATE study_sessions SET course_id = ?1, duration = ?2, created_at = datetime(?3, 'unixepoch'), note = ?4,
+                                   task_id = CASE WHEN course_id = ?1 THEN task_id END
+         WHERE id = ?5",
         params![course_id, duration, ended_at, clean_note(note), session_id],
     )
     .map_err(err)?;
@@ -369,29 +418,137 @@ pub fn get_sessions(db: State<'_, Db>) -> CmdResult<Vec<Value>> {
 
 // ---------- Tasks ----------
 
-#[tauri::command(async)]
-pub fn get_tasks(db: State<'_, Db>, course_id: String) -> CmdResult<Vec<Value>> {
-    let conn = db.0.lock().map_err(err)?;
-    query_json(&conn, "SELECT * FROM tasks WHERE course_id = ?", &[&course_id]).map_err(err)
+pub const MAX_TASK_CHARS: usize = 300;
+
+fn clean_task_text(text: &str) -> Result<String, String> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Err("A task needs some text".into());
+    }
+    Ok(text.chars().take(MAX_TASK_CHARS).collect())
+}
+
+// Open tasks first, in the order they were dragged into, then done ones.
+// logged_seconds is the time of the sessions spent on each.
+pub fn tasks_of(conn: &Connection, course_id: &str) -> rusqlite::Result<Vec<Value>> {
+    query_json(
+        conn,
+        "SELECT t.id, t.course_id, t.text, t.completed, t.due_date, t.position, t.completed_at,
+                COALESCE((SELECT SUM(duration) FROM study_sessions s WHERE s.task_id = t.id), 0) AS logged_seconds
+         FROM tasks t
+         WHERE t.course_id = ?
+         ORDER BY t.completed, COALESCE(t.position, 0), t.rowid",
+        &[&course_id],
+    )
 }
 
 #[tauri::command(async)]
-pub fn add_task(db: State<'_, Db>, course_id: String, text: String) -> CmdResult<Value> {
+pub fn get_tasks(db: State<'_, Db>, course_id: String) -> CmdResult<Vec<Value>> {
     let conn = db.0.lock().map_err(err)?;
-    let id = new_id(&conn, "tasks");
+    tasks_of(&conn, &course_id).map_err(err)
+}
+
+// New tasks go to the end of the list.
+pub fn add_task_at(conn: &Connection, course_id: &str, text: &str, due_date: Option<&str>) -> Result<String, String> {
+    let text = clean_task_text(text)?;
+    let due = clean_date(conn, due_date)?;
+    let id = new_id(conn, "tasks");
     conn.execute(
-        "INSERT INTO tasks (id, course_id, text, completed) VALUES (?, ?, ?, 0)",
-        params![id, course_id, text],
+        "INSERT INTO tasks (id, course_id, text, completed, due_date, position)
+         VALUES (?1, ?2, ?3, 0, ?4, (SELECT COALESCE(MAX(position), 0) + 1 FROM tasks WHERE course_id = ?2))",
+        params![id, course_id, text, due],
     )
     .map_err(err)?;
+    Ok(id)
+}
+
+#[tauri::command(async)]
+pub fn add_task(db: State<'_, Db>, course_id: String, text: String, due_date: Option<String>) -> CmdResult<Value> {
+    let conn = db.0.lock().map_err(err)?;
+    let id = add_task_at(&conn, &course_id, &text, due_date.as_deref())?;
     Ok(json!({ "id": id, "courseId": course_id, "text": text, "completed": 0 }))
+}
+
+#[tauri::command(async)]
+pub fn update_task(db: State<'_, Db>, task_id: String, text: String, due_date: Option<String>) -> CmdResult<Value> {
+    let conn = db.0.lock().map_err(err)?;
+    let text = clean_task_text(&text)?;
+    let due = clean_date(&conn, due_date.as_deref())?;
+    let changes = conn
+        .execute("UPDATE tasks SET text = ?, due_date = ? WHERE id = ?", params![text, due, task_id])
+        .map_err(err)?;
+    if changes == 0 {
+        return Err("That task no longer exists".into());
+    }
+    Ok(json!({ "success": true }))
+}
+
+// Records when a task was ticked off, for the weekly review.
+pub fn toggle_task_at(conn: &Connection, task_id: &str, now_secs: i64) -> rusqlite::Result<usize> {
+    conn.execute(
+        "UPDATE tasks SET completed = NOT completed,
+                          completed_at = CASE WHEN completed THEN NULL ELSE ? END
+         WHERE id = ?",
+        params![now_secs, task_id],
+    )
 }
 
 #[tauri::command(async)]
 pub fn toggle_task(db: State<'_, Db>, task_id: String) -> CmdResult<Value> {
     let conn = db.0.lock().map_err(err)?;
-    conn.execute("UPDATE tasks SET completed = NOT completed WHERE id = ?", [task_id]).map_err(err)?;
+    toggle_task_at(&conn, &task_id, now_ms() / 1000).map_err(err)?;
     Ok(json!({ "success": true }))
+}
+
+// Saves the order tasks were dragged into. Ids from other subjects are ignored.
+pub fn reorder_tasks_at(conn: &mut Connection, course_id: &str, ids: &[String]) -> rusqlite::Result<()> {
+    let tx = conn.transaction()?;
+    for (i, id) in ids.iter().enumerate() {
+        tx.execute(
+            "UPDATE tasks SET position = ? WHERE id = ? AND course_id = ?",
+            params![i as i64 + 1, id, course_id],
+        )?;
+    }
+    tx.commit()
+}
+
+#[tauri::command(async)]
+pub fn reorder_tasks(db: State<'_, Db>, course_id: String, ids: Vec<String>) -> CmdResult<Value> {
+    let mut conn = db.0.lock().map_err(err)?;
+    reorder_tasks_at(&mut conn, &course_id, &ids).map_err(err)?;
+    Ok(json!({ "success": true }))
+}
+
+// Open tasks of subjects in the library that are overdue or due by `until`
+// (YYYY-MM-DD), soonest first.
+pub fn due_tasks(conn: &Connection, until: &str) -> rusqlite::Result<Vec<Value>> {
+    query_json(
+        conn,
+        "SELECT t.id, t.course_id, t.text, t.due_date, c.code, c.title
+         FROM tasks t JOIN courses c ON t.course_id = c.id
+         WHERE NOT t.completed AND t.due_date IS NOT NULL AND t.due_date <= ? AND NOT COALESCE(c.archived, 0)
+         ORDER BY t.due_date, c.rowid, COALESCE(t.position, 0), t.rowid",
+        &[&until],
+    )
+}
+
+#[tauri::command(async)]
+pub fn get_due_tasks(db: State<'_, Db>, until: String) -> CmdResult<Vec<Value>> {
+    let conn = db.0.lock().map_err(err)?;
+    due_tasks(&conn, &until).map_err(err)
+}
+
+// Tasks ticked off between two Unix times (from inclusive, to exclusive).
+#[tauri::command(async)]
+pub fn get_completed_tasks(db: State<'_, Db>, from: i64, to: i64) -> CmdResult<Vec<Value>> {
+    let conn = db.0.lock().map_err(err)?;
+    query_json(
+        &conn,
+        "SELECT id, course_id, text, completed_at FROM tasks
+         WHERE completed AND completed_at >= ? AND completed_at < ? ORDER BY completed_at",
+        &[&from, &to],
+    )
+    .map_err(err)
 }
 
 #[tauri::command(async)]
@@ -455,6 +612,15 @@ pub fn timer_stop(app: AppHandle) -> CmdResult<Value> {
     timer::with_timer(&app, |state, conn, now| {
         let ev = timer::stop(state, conn, now)?;
         Ok((ev.clone(), vec![ev]))
+    })
+}
+
+// The task the current (or next) session on `course_id` is spent on; none clears it.
+#[tauri::command(async)]
+pub fn timer_set_task(app: AppHandle, task_id: Option<String>, course_id: String) -> CmdResult<Value> {
+    timer::with_timer(&app, |state, conn, _| {
+        timer::set_task(state, conn, task_id, &course_id)?;
+        Ok((json!({ "success": true }), vec![]))
     })
 }
 
@@ -625,6 +791,92 @@ mod tests {
         assert!(add_session_at(&mut conn, "zzz", ENDED, 600, None).is_err());
         assert!(update_session_at(&mut conn, 999, "a", ENDED, 600, None).is_err());
         assert_eq!(total(&conn, "a"), 0);
+    }
+
+    fn task_texts(conn: &Connection, course: &str) -> Vec<String> {
+        tasks_of(conn, course).unwrap().iter().map(|t| t["text"].as_str().unwrap().to_string()).collect()
+    }
+
+    #[test]
+    fn tasks_keep_their_order_due_dates_and_time() {
+        let mut conn = setup();
+        // A task from before 1.3 has no position; it stays first.
+        conn.execute("INSERT INTO tasks (id, course_id, text) VALUES ('old', 'a', 'Old')", []).unwrap();
+        let read = add_task_at(&conn, "a", "  Read ch. 5 ", Some("2026-12-01")).unwrap();
+        let sheet = add_task_at(&conn, "a", "Problem sheet", None).unwrap();
+        assert!(add_task_at(&conn, "a", "   ", None).is_err());
+        assert!(add_task_at(&conn, "a", "x", Some("2026-02-30")).is_err());
+        assert_eq!(task_texts(&conn, "a"), ["Old", "Read ch. 5", "Problem sheet"]);
+
+        reorder_tasks_at(&mut conn, "a", &[sheet.clone(), "old".into(), read.clone()]).unwrap();
+        assert_eq!(task_texts(&conn, "a"), ["Problem sheet", "Old", "Read ch. 5"]);
+
+        // Done tasks sink to the bottom and remember when.
+        toggle_task_at(&conn, &sheet, 1_790_000_000).unwrap();
+        assert_eq!(task_texts(&conn, "a"), ["Old", "Read ch. 5", "Problem sheet"]);
+        let done_at: Option<i64> =
+            conn.query_row("SELECT completed_at FROM tasks WHERE id = ?", [&sheet], |r| r.get(0)).unwrap();
+        assert_eq!(done_at, Some(1_790_000_000));
+        toggle_task_at(&conn, &sheet, 1_790_000_100).unwrap();
+        let done_at: Option<i64> =
+            conn.query_row("SELECT completed_at FROM tasks WHERE id = ?", [&sheet], |r| r.get(0)).unwrap();
+        assert_eq!(done_at, None, "unticking clears it");
+
+        // Time spent on a task adds up from its sessions.
+        conn.execute("INSERT INTO study_sessions (course_id, duration, task_id) VALUES ('a', 600, ?)", [&read]).unwrap();
+        conn.execute("INSERT INTO study_sessions (course_id, duration, task_id) VALUES ('a', 300, ?)", [&read]).unwrap();
+        let tasks = tasks_of(&conn, "a").unwrap();
+        let logged = tasks.iter().find(|t| t["id"] == read.as_str()).unwrap()["logged_seconds"].as_i64();
+        assert_eq!(logged, Some(900));
+    }
+
+    #[test]
+    fn due_tasks_cover_open_tasks_in_the_library() {
+        let conn = setup();
+        add_task_at(&conn, "a", "Overdue", Some("2026-11-01")).unwrap();
+        add_task_at(&conn, "a", "Later", Some("2027-03-01")).unwrap();
+        add_task_at(&conn, "a", "No date", None).unwrap();
+        let done = add_task_at(&conn, "b", "Done", Some("2026-11-10")).unwrap();
+        toggle_task_at(&conn, &done, 1).unwrap();
+        add_task_at(&conn, "b", "Soon", Some("2026-11-15")).unwrap();
+        let texts = |until: &str| -> Vec<String> {
+            due_tasks(&conn, until).unwrap().iter().map(|t| t["text"].as_str().unwrap().to_string()).collect()
+        };
+        assert_eq!(texts("2026-11-20"), ["Overdue", "Soon"]);
+        conn.execute("UPDATE courses SET archived = 1 WHERE id = 'b'", []).unwrap();
+        assert_eq!(texts("2026-11-20"), ["Overdue"]);
+    }
+
+    #[test]
+    fn history_shows_and_searches_the_task() {
+        let mut conn = setup();
+        let task = add_task_at(&conn, "a", "Problem set 3", None).unwrap();
+        let id = add_session_at(&mut conn, "a", ENDED, 600, None).unwrap();
+        conn.execute("UPDATE study_sessions SET task_id = ? WHERE id = ?", params![task, id]).unwrap();
+        add_session_at(&mut conn, "b", ENDED - 1000, 600, None).unwrap();
+        let found = history_rows(&conn, 50, "problem set").unwrap();
+        assert_eq!(found["total"], 1);
+        assert_eq!(found["rows"][0]["task_text"], "Problem set 3");
+        // Edited on the same subject, it keeps the task; moved, it loses it.
+        update_session_at(&mut conn, id, "a", ENDED, 900, None).unwrap();
+        assert_eq!(history_rows(&conn, 50, "problem set").unwrap()["total"], 1);
+        update_session_at(&mut conn, id, "b", ENDED, 900, None).unwrap();
+        assert_eq!(history_rows(&conn, 50, "problem set").unwrap()["total"], 0);
+        // A deleted task leaves the session in place.
+        conn.execute("DELETE FROM tasks", []).unwrap();
+        assert_eq!(history_rows(&conn, 50, "").unwrap()["total"], 2);
+    }
+
+    #[test]
+    fn subject_terms_and_colors_are_checked() {
+        assert_eq!(clean_term(Some("  Fall 2026 ")).as_deref(), Some("Fall 2026"));
+        assert_eq!(clean_term(Some("   ")), None);
+        assert_eq!(clean_term(None), None);
+        assert_eq!(clean_color(Some("#3987E5")).unwrap().as_deref(), Some("#3987e5"));
+        assert_eq!(clean_color(Some("")).unwrap(), None);
+        assert!(clean_color(Some("red")).is_err());
+        assert!(clean_color(Some("#12345")).is_err());
+        assert!(clean_color(Some("#12345g")).is_err());
     }
 
     #[test]
