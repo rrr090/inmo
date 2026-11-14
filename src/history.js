@@ -1,9 +1,9 @@
-// The Session History page: the log, adding and editing sessions by hand, and
+// The History page: the log, adding and editing sessions by hand, and
 // CSV export / import.
 import { icon } from './icons.js';
 import { showToast, showUndoToast } from './notify.js';
 import { state, activeCourses, courseById, reloadData } from './state.js';
-import { escapeHtml, formatHM, formatDuration, localDateKey, localTimeKey, emptyState, errorText } from './format.js';
+import { escapeHtml, formatCompact, formatDuration, localDateKey, localTimeKey, addDays, emptyState, errorText } from './format.js';
 import { swatch } from './colors.js';
 
 const PAGE = 50;
@@ -34,21 +34,54 @@ export async function renderHistory() {
       : `<tr class="empty-row"><td colspan="4">${emptyState('history', 'No sessions yet', 'Finished study sessions are listed here. Studied without the timer? Add the session by hand.')}</td></tr>`;
     return;
   }
-  tbody.innerHTML = rows.map(row => `
-    <tr>
-      <td>${escapeHtml(row.created_at)}</td>
+  tbody.innerHTML = groupByDay(rows).map(day => `
+    <tr class="day-row">
+      <td colspan="4"><span class="day-name">${escapeHtml(day.label)}</span><span class="day-total">${formatCompact(day.total)}</span></td>
+    </tr>
+    ${day.rows.map(sessionRow).join('')}
+  `).join('');
+}
+
+// Sessions under a header for each day they ended on, newest day first. The
+// day's total covers the sessions shown, so a search totals its matches.
+function groupByDay(rows) {
+  const today = localDateKey(new Date());
+  const yesterday = localDateKey(addDays(new Date(), -1));
+  const thisYear = new Date().getFullYear();
+  const days = [];
+  for (const row of rows) {
+    const ended = new Date(row.ended_at * 1000);
+    const key = localDateKey(ended);
+    let day = days[days.length - 1];
+    if (!day || day.key !== key) {
+      const label = key === today ? 'Today' : key === yesterday ? 'Yesterday'
+        : ended.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', ...(ended.getFullYear() !== thisYear && { year: 'numeric' }) });
+      day = { key, label, total: 0, rows: [] };
+      days.push(day);
+    }
+    day.total += row.duration;
+    day.rows.push(row);
+  }
+  return days;
+}
+
+function sessionRow(row) {
+  const ended = new Date(row.ended_at * 1000);
+  const started = new Date((row.ended_at - row.duration) * 1000);
+  return `
+    <tr class="session-row">
+      <td class="history-time" title="${escapeHtml(row.created_at)}">${localTimeKey(started)} – ${localTimeKey(ended)}</td>
       <td>
-        <span class="history-subject">${swatch(courseById(row.course_id))}<b>${escapeHtml(row.code)}</b> - ${escapeHtml(row.title)}</span>
+        <span class="history-subject">${swatch(courseById(row.course_id))}<b>${escapeHtml(row.code)}</b><span class="history-title">${escapeHtml(row.title)}</span></span>
         ${row.task_text ? `<div class="history-task">${icon('target', 12)}${escapeHtml(row.task_text)}</div>` : ''}
         ${row.note ? `<div class="history-note">${escapeHtml(row.note)}</div>` : ''}
       </td>
-      <td class="history-duration">${formatHM(row.duration)}</td>
+      <td class="history-duration">${formatCompact(row.duration)}</td>
       <td class="history-actions">
-        <button class="delete-item-btn" onclick="window.openSessionDialog(${row.id})" title="Edit session" aria-label="Edit session">${icon('pencil', 15)}</button>
-        <button class="delete-item-btn" onclick="window.handleDeleteSession(${row.id})" title="Delete session" aria-label="Delete session">${icon('trash-2', 15)}</button>
+        <button class="icon-btn" onclick="window.openSessionDialog(${row.id})" title="Edit session" aria-label="Edit session">${icon('pencil', 15)}</button>
+        <button class="icon-btn danger" onclick="window.handleDeleteSession(${row.id})" title="Delete session" aria-label="Delete session">${icon('trash-2', 15)}</button>
       </td>
-    </tr>
-  `).join('');
+    </tr>`;
 }
 
 // Filters by note or subject as you type.
@@ -109,7 +142,7 @@ export function openSessionDialog(sessionId) {
       <div class="form-row">
         <div class="form-group">
           <label for="session-date">Date</label>
-          <input type="date" id="session-date" value="${localDateKey(start)}" max="${localDateKey(new Date())}">
+          <input type="date" id="session-date" required value="${localDateKey(start)}" max="${localDateKey(new Date())}">
         </div>
         <div class="form-group">
           <label for="session-start">Started at</label>

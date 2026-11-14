@@ -96,7 +96,7 @@ export async function saveNumberSetting(key, input) {
   }
   if (key === 'daily_goal_min') {
     state.dailyGoalSecs = n * 60;
-    await reloadData(); // redraws the goal bar and the trend chart's goal line
+    await reloadData(); // redraws the timer's ring and the trend chart's goal line
   }
 }
 

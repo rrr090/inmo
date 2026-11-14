@@ -38,6 +38,7 @@ function taskRow(t) {
   const id = escapeHtml(t.id);
   const linked = state.timer.taskId === t.id;
   const logged = Number(t.logged_seconds) || 0;
+  const meta = dueBadge(t) + (logged ? `<span class="task-time" title="Time logged on this task">${icon('timer', 12)}${formatCompact(logged)}</span>` : '');
   return `
     <div class="task-item ${t.completed ? 'completed' : ''} ${linked ? 'linked' : ''}" data-task-id="${id}">
       ${t.completed
@@ -45,11 +46,10 @@ function taskRow(t) {
         : `<button class="drag-handle" data-task-id="${id}" title="Drag to reorder (or focus and use ↑ ↓)" aria-label="Reorder ${escapeHtml(t.text)}. Use the up and down arrow keys.">${icon('grip-vertical', 14)}</button>`}
       <div class="task-item-left" onclick="window.handleToggleTask('${id}')">
         <input type="checkbox" ${t.completed ? 'checked' : ''} aria-label="Done" onclick="event.stopPropagation(); window.handleToggleTask('${id}')">
-        <span class="task-text">${escapeHtml(t.text)}</span>
-      </div>
-      <div class="task-meta">
-        ${dueBadge(t)}
-        ${logged ? `<span class="task-time" title="Time logged on this task">${icon('timer', 12)}${formatCompact(logged)}</span>` : ''}
+        <div class="task-body">
+          <span class="task-text">${escapeHtml(t.text)}</span>
+          ${meta ? `<div class="task-meta">${meta}</div>` : ''}
+        </div>
       </div>
       <div class="task-actions">
         ${t.completed ? '' : `<button class="icon-btn task-focus" onclick="window.handleWorkOnTask('${id}')" title="${linked ? 'Stop working on this' : 'Work on this: sessions are logged against it'}" aria-pressed="${linked}" aria-label="Work on this task">${icon('target', 15)}</button>`}
@@ -65,7 +65,7 @@ export async function loadTasks() {
   const container = document.getElementById('task-list');
   renderDueTasks();
   if (!container || !course) {
-    if (headerTitle) headerTitle.innerText = 'To-Do List';
+    if (headerTitle) headerTitle.innerText = 'Tasks';
     return;
   }
 
@@ -73,7 +73,7 @@ export async function loadTasks() {
   tasksCourseId = course.id;
   const done = tasks.filter(t => t.completed).length;
   if (headerTitle) {
-    headerTitle.innerHTML = `${escapeHtml(course.code)} To-Do List${tasks.length ? ` <span class="tasks-count">${done} of ${tasks.length} done</span>` : ''}`;
+    headerTitle.innerHTML = `Tasks <span class="tasks-subject">${swatch(course)}${escapeHtml(course.code)}</span>${tasks.length ? `<span class="tasks-count">${done} of ${tasks.length} done</span>` : ''}`;
   }
 
   // A task picked for another subject while the timer was idle doesn't apply here.

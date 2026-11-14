@@ -4,7 +4,7 @@ import { renderIcons } from './icons.js';
 import { showToast } from './notify.js';
 import { state, onDataChanged, reloadData, getActiveCourse } from './state.js';
 import { formatDuration } from './format.js';
-import { initTimer, toggleTimer, setMode, renderModeTabs, updateInPageWidget, handleNoteInput, saveNote } from './timer.js';
+import { initTimer, toggleTimer, setMode, renderModeTabs, updateInPageWidget, handleNoteInput, saveNote, renderTimerRing } from './timer.js';
 import * as exams from './exams.js';
 import * as subjects from './subjects.js';
 import * as tasks from './tasks.js';
@@ -23,6 +23,7 @@ async function init() {
 
     onDataChanged(subjects.renderSubjects);
     onDataChanged(tasks.loadTasks);
+    onDataChanged(renderTimerRing);
     onDataChanged(() => analytics.isAnalyticsPageActive() && analytics.renderAnalyticsPage());
     onDataChanged(() => history.isHistoryPageActive() && history.renderHistory());
 

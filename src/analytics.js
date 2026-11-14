@@ -166,7 +166,8 @@ function renderWeekComparison() {
   const badgeColor = pctChange >= 0 ? 'var(--accent)' : 'var(--danger)';
   const compBadge = document.getElementById('weekly-comparison-badge');
   if (compBadge) {
-    compBadge.innerHTML = `Week-over-Week: <span style="color: ${badgeColor};">${pctDisplay}</span>`;
+    compBadge.innerHTML = `<span style="color: ${badgeColor};">${pctDisplay}</span> vs the 7 days before`;
+    compBadge.title = "Study time in the last 7 days compared with the 7 days before";
   }
 }
 
@@ -301,7 +302,7 @@ function renderTrendChart() {
 
   document.getElementById('trend-empty').classList.toggle('is-hidden', !noStudy);
   const title = document.getElementById('trend-title');
-  if (title) title.innerText = `Focus Trend: Last ${range} Days`;
+  if (title) title.innerText = `Study time, last ${range} days`;
 
   const labels = days.map(d => fmtDay(d, range === 7));
   const datasets = [];

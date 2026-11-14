@@ -1,18 +1,3 @@
-body {
-      margin: 0; padding: 0;
-      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background-color: var(--bg-base);
-      color: var(--text-main);
-      height: 100vh;
-      display: flex;
-      overflow: hidden;
-    }
-
-    .time-display {
-      font-size: 80px; font-weight: 800; font-family: 'JetBrains Mono', monospace; letter-spacing: -3px;
-      text-shadow: 0 0 30px rgba(255,255,255,0.05);
-    }
-
 :root {
       --bg-base: #070709;
       --bg-surface: #111116;
@@ -76,7 +61,6 @@ body {
     .nav-link:hover, .nav-link.active {
       color: var(--text-main); background-color: var(--bg-card-hover);
     }
-    .nav-link.active { border-left: 3px solid var(--accent); }
 
     .setting-row {
       display: flex; align-items: center; justify-content: space-between;
@@ -155,18 +139,6 @@ body {
     .page { display: none; }
     .page.active { display: flex; flex-direction: column; gap: 24px; }
 
-    /* Dashboard Metrics Cards */
-    .dashboard-metrics {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
-    }
-    .metric-card {
-      background-color: var(--bg-card); border: 1px solid var(--border-color);
-      border-radius: 12px; padding: 20px;
-      display: flex; flex-direction: column; justify-content: space-between; gap: 12px;
-    }
-    .metric-header { display: flex; justify-content: space-between; align-items: center; }
-    .metric-header span { font-size: 11px; color: var(--text-sub); font-weight: 700; letter-spacing: 0.5px; }
-    .metric-value { font-size: 20px; font-weight: 800; }
     
     .progress-bar-bg {
       width: 100%; height: 6px; background: var(--bg-surface); border-radius: 3px; overflow: hidden;
@@ -238,11 +210,11 @@ body {
       flex: 1; background: var(--bg-surface); border: 1px solid var(--border-color);
       padding: 10px 14px; border-radius: 8px; color: #fff; outline: none; font-size: 13px;
     }
-    .task-input-row button {
+    .task-input-row > button {
       background: var(--accent); border: none; padding: 0 18px;
       border-radius: 8px; font-weight: 700; cursor: pointer; color: #000; transition: background 0.2s;
     }
-    .task-input-row button:hover { background: var(--accent-hover); }
+    .task-input-row > button:hover { background: var(--accent-hover); }
 
     .task-list { display: flex; flex-direction: column; gap: 6px; max-height: 280px; overflow-y: auto; }
     .task-item {
@@ -251,7 +223,7 @@ body {
       border-radius: 8px; font-size: 13px;
     }
     .task-item-left { display: flex; align-items: center; gap: 12px; cursor: pointer; flex: 1; }
-    .task-item.completed .task-item-left span { text-decoration: line-through; color: var(--text-sub); }
+    .task-item.completed .task-text { text-decoration: line-through; color: var(--text-sub); }
     
     .task-item input[type="checkbox"] { accent-color: var(--accent); }
 
@@ -529,28 +501,11 @@ body {
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
     }
-    /* ---------- Previously injected by stuff.js at runtime ---------- */
+
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: var(--bg-base); }
     ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
     ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
-
-    .course-item.active {
-      background: rgba(16, 185, 129, 0.15) !important;
-      border-left: 4px solid var(--subject-color, var(--accent)) !important;
-      box-shadow: inset 0 0 10px rgba(16, 185, 129, 0.1), 0 0 10px rgba(16, 185, 129, 0.25);
-      border-radius: 6px;
-    }
-    .course-item.active .title { color: #ffffff !important; font-weight: 700 !important; }
-    .course-item.active .code { color: var(--accent) !important; font-weight: 600 !important; }
-    .nav-link.active {
-      background: var(--accent) !important; color: #000000 !important; font-weight: 700 !important;
-      box-shadow: 0 0 12px rgba(16, 185, 129, 0.4) !important; border-radius: 6px;
-    }
-    .tab-button.active, .mode-tab.active {
-      background: var(--accent) !important; color: #000000 !important; font-weight: 700 !important;
-      box-shadow: 0 0 10px rgba(16, 185, 129, 0.3) !important;
-    }
 
     /* Pill on the other pages while a session runs */
     .mini-timer-widget {
@@ -574,7 +529,6 @@ body {
     }
 
     /* ---------- Timer ---------- */
-    .target-label { font-size: 11px; color: var(--text-sub); font-weight: 700; margin-right: 8px; }
     .timer-course-badge {
       padding: 6px 14px; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35);
       border-radius: 6px; display: inline-flex; align-items: center; gap: 8px; margin-top: 4px;
@@ -739,9 +693,6 @@ body {
 
     /* Tasks */
     .tasks-count { margin-left: 8px; font-size: 11px; font-weight: 600; color: var(--text-sub); }
-    .task-input-row .task-due-input {
-      flex: 0 0 auto; width: 150px; padding: 10px; color-scheme: dark; font-family: inherit;
-    }
     .task-item { gap: 8px; padding: 8px 10px 8px 6px; }
     .task-item-left { min-width: 0; }
     .task-text { overflow-wrap: anywhere; }
@@ -851,3 +802,185 @@ body {
     .shortcut-group h3 { margin: 0 0 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-sub); }
     .shortcut-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 5px 0; font-size: 12px; }
     .shortcut-keys { display: inline-flex; align-items: center; flex-shrink: 0; }
+
+    /* ---------- UI polish: page headers, Timer layout, ring, library, history, date picker ---------- */
+
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+    /* Navigation: a quiet highlight, not a solid block */
+    .nav-link { position: relative; }
+    .nav-link .icon { transition: color 0.2s ease; }
+    .nav-link.active { background: rgba(16, 185, 129, 0.1); color: var(--text-main); }
+    .nav-link.active .icon { color: var(--accent); }
+    .nav-link.active::before {
+      content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0;
+      background: var(--accent);
+    }
+    .library-header > span:first-child { text-transform: uppercase; }
+
+    /* Page headers */
+    .page-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+    .page-header h1 { margin: 0 0 4px 0; font-size: 24px; font-weight: 800; letter-spacing: -0.3px; }
+    .page-header p { margin: 0; font-size: 13px; color: var(--text-sub); }
+    .page-header p:empty { display: none; }
+    .page-subhead { margin: 0; font-size: 15px; }
+    .header-badge {
+      background: var(--bg-card); border: 1px solid var(--border-color);
+      padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; color: var(--text-sub);
+    }
+    .header-badge span { font-weight: 800; }
+    .streak-chip {
+      display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 999px;
+      font-size: 12px; font-weight: 700; color: var(--text-sub);
+      background: var(--bg-card); border: 1px solid var(--border-color);
+    }
+    .streak-chip.on { color: #fdba74; background: rgba(249, 115, 22, 0.1); border-color: rgba(249, 115, 22, 0.3); }
+
+    /* Timer page: timer and exams on the left, tasks and "Due soon" on the right.
+       Narrower windows stack them: timer, tasks, due soon, exams. */
+    .focus-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
+    .focus-col { display: contents; }
+    .focus-grid .timer-section { order: 1; }
+    .focus-grid #active-course-todos-box { order: 2; }
+    .focus-grid #due-box { order: 3; }
+    .focus-grid #exams-box { order: 4; }
+    @media (min-width: 1180px) {
+      .focus-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+      .focus-col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+      .focus-grid .task-list { max-height: 440px; }
+    }
+
+    .timer-section { padding: 22px 24px 26px; gap: 14px; }
+    .timer-course-badge {
+      margin-top: 0; padding: 6px 12px; gap: 8px; max-width: 100%;
+      background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 999px; box-shadow: none;
+      white-space: nowrap; overflow: hidden;
+    }
+    .badge-code { color: var(--text-main); font-size: 13px; text-shadow: none; }
+    .badge-sep { display: none; }
+    .badge-title { color: var(--text-sub); font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
+
+    .timer-ring { position: relative; width: 264px; height: 264px; flex-shrink: 0; }
+    .timer-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+    .timer-ring circle { fill: none; stroke-width: 5; }
+    .timer-ring-track { stroke: rgba(255, 255, 255, 0.06); }
+    .timer-ring-fill {
+      stroke: var(--accent); stroke-linecap: round; stroke-dasharray: 0 100;
+      transition: stroke-dasharray 0.6s ease, stroke 0.3s ease;
+      filter: drop-shadow(0 0 6px rgba(16, 185, 129, 0.35));
+    }
+    .timer-section.on-break .timer-ring-fill { stroke: #60a5fa; filter: drop-shadow(0 0 6px rgba(96, 165, 250, 0.35)); }
+    .timer-ring-center {
+      position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+    }
+    .time-display { font-size: 46px; letter-spacing: -2px; line-height: 1; font-variant-numeric: tabular-nums; }
+    .timer-ring-caption { font-size: 12px; font-weight: 600; color: var(--text-sub); text-align: center; max-width: 190px; }
+    .timer-ring.full .timer-ring-caption { color: var(--accent); }
+    .timer-status { margin: -4px 0 0; min-height: 16px; }
+    .session-note { margin: 0 auto; }
+    .working-on { margin: -4px auto 0; }
+    .mode-tab.active { background: var(--accent); color: #000; font-weight: 700; }
+
+    /* Tasks card */
+    #active-course-todos-box .section-head { margin-bottom: 12px; }
+    #tasks-header-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .tasks-subject {
+      display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px;
+      font-size: 11px; font-weight: 700; color: var(--text-sub); background: rgba(255, 255, 255, 0.05);
+    }
+    .tasks-count { margin-left: 0; }
+    .task-input-row { align-items: stretch; }
+    .task-input-row > input { min-width: 0; }
+    .task-input-row > button.task-add-btn { padding: 0 12px; display: inline-flex; align-items: center; justify-content: center; }
+    .task-input-row .date-field-btn { height: 100%; }
+    .task-body { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 0; padding: 2px 0; }
+    .task-body .task-meta { flex-wrap: wrap; }
+
+    /* Subject library */
+    .course-item { position: relative; }
+    .course-item.active {
+      background: var(--bg-card-hover); border-color: var(--border-color);
+      box-shadow: inset 3px 0 0 var(--subject-color, var(--accent));
+    }
+    .course-item.active .title { color: #fff; font-weight: 700; }
+    .course-info .title > span:last-child { overflow: visible; }
+    .course-info .title .title-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .course-info .code { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .exam-pill {
+      flex-shrink: 0; padding: 1px 7px; border-radius: 999px;
+      font-size: 10px; font-weight: 700; color: var(--text-sub); background: rgba(255, 255, 255, 0.06);
+    }
+    .exam-pill.soon { color: #fbbf24; background: rgba(251, 191, 36, 0.12); }
+    /* The edit and archive buttons sit over the row's right end, on hover only,
+       so they don't take width from the text the rest of the time. */
+    .course-actions {
+      position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+      padding-left: 18px; border-radius: 6px;
+      background: linear-gradient(to right, transparent, var(--bg-card) 18px);
+      pointer-events: none;
+    }
+    .course-item.active .course-actions { background: linear-gradient(to right, transparent, var(--bg-card-hover) 18px); }
+    .course-item:hover .course-actions, .course-actions:focus-within { pointer-events: auto; }
+
+    /* History: grouped by day */
+    .history-table th { text-transform: uppercase; }
+    .history-table tr.day-row td {
+      padding: 16px 16px 8px; background: var(--bg-surface); border-bottom: 1px solid var(--border-color);
+    }
+    .history-table tr.day-row:hover td { background: var(--bg-surface); }
+    .day-name { font-size: 12px; font-weight: 800; color: var(--text-main); }
+    .day-total { margin-left: 10px; font-size: 12px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+    .history-time-col { width: 140px; }
+    .history-time { color: var(--text-sub); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .history-title { color: var(--text-sub); }
+    .history-duration { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .history-actions .icon-btn { opacity: 0.5; }
+    .history-table tr:hover .history-actions .icon-btn, .history-actions .icon-btn:focus-visible { opacity: 1; }
+
+    /* Date picker (datepicker.js) */
+    .date-field { position: relative; display: inline-flex; flex-shrink: 0; }
+    .form-group .date-field { display: flex; }
+    .date-field-btn {
+      display: inline-flex; align-items: center; gap: 8px; width: 100%;
+      background: var(--bg-surface); border: 1px solid var(--border-color); color: var(--text-main);
+      padding: 10px 12px; border-radius: 8px; font-family: inherit; font-size: 13px; font-weight: 500;
+      cursor: pointer; white-space: nowrap; text-align: left;
+    }
+    .modal .date-field-btn { background: var(--bg-card); }
+    .date-field:not(:has(.date-field-clear)) .date-field-btn { padding-right: 12px; }
+    .form-row > .form-group { min-width: 0; }
+    .form-row .form-group input { width: 100%; }
+    .date-field-btn:hover, .date-field-btn[aria-expanded="true"] { border-color: var(--accent); }
+    .date-field-btn .icon { color: var(--text-sub); }
+    .date-field.has-value .date-field-btn { padding-right: 32px; }
+    .date-field-placeholder { color: #6b7280; }
+    .date-field-clear {
+      position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+      display: none; align-items: center; justify-content: center; width: 20px; height: 20px;
+      background: none; border: none; border-radius: 5px; color: var(--text-sub); cursor: pointer;
+    }
+    .date-field.has-value .date-field-clear { display: inline-flex; }
+    .date-field-clear:hover { color: var(--text-main); background: rgba(255, 255, 255, 0.08); }
+
+    .datepicker {
+      position: fixed; z-index: 1200; width: 268px; padding: 12px;
+      background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 12px;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55); animation: pop-in 0.12s ease;
+    }
+    .datepicker-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .datepicker-title { font-size: 13px; font-weight: 700; }
+    .datepicker-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+    .datepicker-weekday { padding: 4px 0; font-size: 10px; font-weight: 700; color: var(--text-sub); text-align: center; }
+    .datepicker-day {
+      height: 32px; border: 1px solid transparent; border-radius: 7px; background: none;
+      color: var(--text-main); font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+      font-variant-numeric: tabular-nums;
+    }
+    .datepicker-day:hover:not(:disabled) { background: var(--bg-card-hover); }
+    .datepicker-day.outside { color: #4b5563; }
+    .datepicker-day.today { border-color: rgba(16, 185, 129, 0.5); }
+    .datepicker-day.selected { background: var(--accent); color: #000; font-weight: 800; }
+    .datepicker-day:disabled { color: #374151; cursor: default; }
+    .datepicker-foot { display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-color); }
+    .datepicker-foot .btn-secondary { padding: 6px 10px; font-size: 12px; }
+    .datepicker-foot .btn-secondary:disabled { opacity: 0.4; cursor: default; }

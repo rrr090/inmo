@@ -4,9 +4,9 @@ import { icon } from './icons.js';
 import { showToast, confirmDialog, showUndoToast } from './notify.js';
 import { state, activeCourses, archivedCourses, getActiveCourse, setActiveCourse, reloadData, courseById } from './state.js';
 import { escapeHtml, formatHM, formatCompact, emptyState, localDateKey, errorText } from './format.js';
-import { SUBJECT_COLORS, COLOR_NAMES, courseColor, swatch, allTerms } from './colors.js';
+import { SUBJECT_COLORS, COLOR_NAMES, courseColor, nextAutoColor, swatch, allTerms } from './colors.js';
 import { stopIfRunning } from './timer.js';
-import { renderExams, examTag } from './exams.js';
+import { renderExams, examTag, examSoon } from './exams.js';
 
 let showArchived = false;
 
@@ -50,8 +50,8 @@ function courseRow(course) {
   return `
     <div class="course-item ${state.activeCourseId === course.id ? 'active' : ''}" id="course-row-${id}" style="--subject-color: ${courseColor(course)};">
       <div class="course-info" onclick="window.selectCourse('${id}')">
-        <div class="title">${swatch(course)}<span>${escapeHtml(course.title)}</span></div>
-        <div class="code">${escapeHtml(course.code)} • ${formatHM(course.total_seconds)}${examTag(course) ? ` • <span class="exam-tag">${examTag(course)}</span>` : ''}</div>
+        <div class="title">${swatch(course)}<span class="title-text">${escapeHtml(course.title)}</span>${examTag(course) ? `<span class="exam-pill ${examSoon(course) ? 'soon' : ''}">${examTag(course)}</span>` : ''}</div>
+        <div class="code">${escapeHtml(course.code)} · ${formatHM(course.total_seconds)}</div>
       </div>
       <div class="course-actions">
         <button class="icon-btn" title="Edit subject" aria-label="Edit subject" onclick="event.stopPropagation(); window.enableCourseEdit('${id}')">${icon('pencil', 14)}</button>
@@ -65,8 +65,8 @@ function archivedRow(course) {
   return `
     <div class="course-item archived">
       <div class="course-info">
-        <div class="title">${swatch(course)}<span>${escapeHtml(course.title)}</span></div>
-        <div class="code">${escapeHtml(course.code)} • ${formatHM(course.total_seconds)}${course.term ? ` • ${escapeHtml(course.term)}` : ''}</div>
+        <div class="title">${swatch(course)}<span class="title-text">${escapeHtml(course.title)}</span></div>
+        <div class="code">${escapeHtml(course.code)} · ${formatHM(course.total_seconds)}${course.term ? ` · ${escapeHtml(course.term)}` : ''}</div>
       </div>
       <div class="course-actions">
         <button class="icon-btn" title="Restore subject" aria-label="Restore subject" onclick="window.handleRestoreCourse('${id}')">${icon('archive-restore', 14)}</button>
@@ -192,7 +192,7 @@ export async function handleDeleteCourse(courseId) {
   const confirmed = await confirmDialog({
     title: `Delete ${course.title}?`,
     message: 'Its tasks and all of its logged sessions will be deleted too. To keep its history, archive it instead.',
-    confirmLabel: 'Delete Subject',
+    confirmLabel: 'Delete subject',
   });
   if (!confirmed) return;
   try {
@@ -209,8 +209,8 @@ export async function handleResetActiveCourse() {
   if (!course) return;
   const confirmed = await confirmDialog({
     title: `Reset time for ${course.title}?`,
-    message: 'All of its logged sessions will be deleted and its total will go back to 0h 0m.',
-    confirmLabel: 'Reset Time',
+    message: 'All of its logged sessions will be deleted and its total will go back to 0m.',
+    confirmLabel: 'Reset time',
   });
   if (!confirmed) return;
   const r = await window.api.resetCourseTime(course.id);
@@ -247,10 +247,8 @@ export function openSubjectDialog(courseId) {
   if (courseId && !editing) return;
   const current = editing?.color || '';
   const isPreset = !current || SUBJECT_COLORS.includes(current);
-  // What "Automatic" gives: by place in the library, so a new subject goes last.
-  const autoColor = editing && !editing.color
-    ? courseColor(editing)
-    : SUBJECT_COLORS[(editing ? state.courses.findIndex(c => c.id === editing.id) : state.courses.length) % SUBJECT_COLORS.length];
+  // What "Automatic" gives: a color no other subject uses, when there is one.
+  const autoColor = editing && !editing.color ? courseColor(editing) : nextAutoColor();
   // The newest term is the likely one for a new subject.
   const terms = allTerms();
   const term = editing ? editing.term || '' : terms[0] || '';
@@ -259,14 +257,14 @@ export function openSubjectDialog(courseId) {
   overlay.className = 'modal-overlay open';
   overlay.innerHTML = `
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="subject-dialog-title">
-      <h2 id="subject-dialog-title">${editing ? 'Edit subject' : 'Add New Subject'}</h2>
+      <h2 id="subject-dialog-title">${editing ? 'Edit subject' : 'Add a subject'}</h2>
       <div class="form-group">
-        <label for="subject-title">Subject Title</label>
+        <label for="subject-title">Title</label>
         <input type="text" id="subject-title" maxlength="120" placeholder="e.g. Database Systems" value="${escapeHtml(editing?.title || '')}">
       </div>
       <div class="form-row form-row-2">
         <div class="form-group">
-          <label for="subject-code">Course Code</label>
+          <label for="subject-code">Course code</label>
           <input type="text" id="subject-code" maxlength="40" placeholder="e.g. CS2050" value="${escapeHtml(editing?.code || '')}">
         </div>
         <div class="form-group">
@@ -294,7 +292,7 @@ export function openSubjectDialog(courseId) {
       <p class="modal-text form-error is-hidden" id="subject-error"></p>
       <div class="modal-actions">
         <button class="btn-secondary" data-action="cancel">Cancel</button>
-        <button class="btn-primary" data-action="save">${editing ? 'Save' : 'Add Subject'}</button>
+        <button class="btn-primary" data-action="save">${editing ? 'Save' : 'Add subject'}</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -358,25 +356,19 @@ export function openSubjectDialog(courseId) {
   if (editing) first.select();
 }
 
-// ---------- Dashboard metrics ----------
+// ---------- Timer page header ----------
 
 function updateMetricsDashboard() {
-  const todayStr = localDateKey(new Date());
-  const todayRecord = state.dailyStats.find(d => d.date === todayStr);
-  const todaySeconds = todayRecord ? todayRecord.total_seconds : 0;
-  const goal = state.dailyGoalSecs;
-  const progressPercent = Math.min(100, Math.round((todaySeconds / goal) * 100));
-
-  const progressText = document.getElementById('daily-progress-text');
-  const progressFill = document.getElementById('daily-progress-fill');
-  if (progressText) progressText.innerText = `${Math.floor(todaySeconds / 60)}m / ${goal / 60}m`;
-  const goalLabel = document.getElementById('daily-goal-label');
-  if (goalLabel) goalLabel.innerText = `DAILY GOAL (${formatCompact(goal).toUpperCase()} TARGET)`;
-  if (progressFill) progressFill.style.width = `${progressPercent}%`;
-
+  const date = document.getElementById('focus-date');
+  if (date) date.innerText = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   const streak = currentStreak();
+  const chip = document.getElementById('streak-chip');
+  if (chip) {
+    chip.classList.toggle('on', streak > 0);
+    chip.title = streak > 0 ? 'Days in a row with some study' : 'Study today to start a streak';
+  }
   const streakVal = document.getElementById('current-streak-val');
-  if (streakVal) streakVal.innerText = streak === 0 ? 'No streak yet' : `${streak} ${streak === 1 ? 'day' : 'days'} in a row`;
+  if (streakVal) streakVal.innerText = streak === 0 ? 'No streak yet' : `${streak}-day streak`;
 }
 
 // Days in a row with study, counting back from today (or yesterday, if today has none yet).

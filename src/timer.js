@@ -1,9 +1,9 @@
-// The Focus Engine's timer. The clock itself runs in the backend (timer.rs); this
+// The timer on the Timer page. The clock itself runs in the backend (timer.rs); this
 // shows its state and sends start/stop. Every stop, from here, the tray, the
 // global shortcut or the floating widget, arrives as a "stopped" timer-event.
 import { showToast, confirmDialog } from './notify.js';
 import { state, getActiveCourse, reloadData } from './state.js';
-import { escapeHtml, formatClock, formatDuration, errorText } from './format.js';
+import { escapeHtml, formatClock, formatDuration, formatCompact, localDateKey, errorText } from './format.js';
 import { renderWorkingOn } from './tasks.js';
 
 const PLAY_ICON = '<path d="M8 5v14l11-7z"/>';
@@ -42,16 +42,7 @@ function applySnapshot(snap) {
   }
   document.querySelector('.timer-section')?.classList.toggle('on-break', onBreak);
 
-  const status = document.getElementById('timer-status');
-  if (status) {
-    let text = '';
-    if (onBreak) text = `${snap.longBreak ? 'Long' : 'Short'} break · press the button to skip it`;
-    else if (running && snap.mode === 'pomodoro') text = `Pomodoro ${snap.pomodorosDone + 1} of ${snap.longBreakEvery} before a long break`;
-    else if (!running && snap.mode === 'pomodoro' && snap.pomodorosDone > 0) {
-      text = `${snap.pomodorosDone} of ${snap.longBreakEvery} done · start the next one when you're ready`;
-    }
-    status.innerText = text;
-  }
+  renderTimerRing();
 
   // Don't overwrite what's being typed, or a change not yet saved.
   const noteInput = document.getElementById('session-note');
@@ -66,6 +57,58 @@ function applySnapshot(snap) {
   renderWorkingOn();
 
   updateInPageWidget();
+}
+
+function todaySeconds() {
+  const today = state.dailyStats.find(d => d.date === localDateKey(new Date()));
+  return today ? today.total_seconds : 0;
+}
+
+// The ring around the clock fills up as a Pomodoro or break runs. Otherwise it
+// shows today's study time, the running session included, against the daily goal.
+// The line under it says what the ring doesn't.
+export function renderTimerRing() {
+  const snap = state.timer;
+  const fill = document.getElementById('timer-ring-fill');
+  const caption = document.getElementById('timer-ring-caption');
+  const status = document.getElementById('timer-status');
+  if (!fill || !caption || !status) return;
+
+  const running = snap.isStudying;
+  const onBreak = snap.phase === 'break';
+  const goal = state.dailyGoalSecs;
+  const today = todaySeconds() + (running && !onBreak ? snap.elapsedSecs || 0 : 0);
+  const todayText = today >= goal
+    ? `${formatCompact(today)} today · goal reached`
+    : `${formatCompact(today)} of ${formatCompact(goal)} today`;
+
+  let frac;
+  let captionText;
+  let statusText = '';
+  if (running && (onBreak || snap.mode === 'pomodoro')) {
+    const elapsed = snap.elapsedSecs || 0;
+    const total = elapsed + (snap.shownSecs || 0);
+    frac = total > 0 ? elapsed / total : 1;
+    if (onBreak) {
+      captionText = snap.longBreak ? 'Long break' : 'Short break';
+      statusText = 'The button skips the rest of the break';
+    } else {
+      captionText = `Pomodoro ${snap.pomodorosDone + 1} of ${snap.longBreakEvery}`;
+      statusText = todayText;
+    }
+  } else {
+    frac = goal > 0 ? today / goal : 0;
+    captionText = todayText;
+    if (!running && snap.mode === 'pomodoro' && snap.pomodorosDone > 0) {
+      statusText = `${snap.pomodorosDone} of ${snap.longBreakEvery} Pomodoros done · start the next one when you're ready`;
+    }
+  }
+  const pct = Math.min(100, Math.max(0, frac * 100));
+  fill.style.strokeDasharray = `${pct} 100`;
+  fill.style.opacity = pct > 0 ? '1' : '0'; // a round cap would draw a dot at 0
+  document.getElementById('timer-ring')?.classList.toggle('full', !running && pct >= 100);
+  if (caption.textContent !== captionText) caption.textContent = captionText;
+  if (status.textContent !== statusText) status.textContent = statusText;
 }
 
 async function handleTimerEvent(ev) {
@@ -167,7 +210,7 @@ export function updateInPageWidget() {
     widget = document.createElement('div');
     widget.id = 'mini-timer-widget';
     widget.className = 'mini-timer-widget';
-    widget.title = 'Back to the Focus Engine';
+    widget.title = 'Back to the timer';
     widget.onclick = () => window.switchToTimerPage();
     document.body.appendChild(widget);
   }
