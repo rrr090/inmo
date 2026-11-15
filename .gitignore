@@ -91,3 +91,9 @@ typings/
 # Tauri build output
 tauri-ui-dist/
 src-tauri/target/
+
+# Editor and OS files
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
