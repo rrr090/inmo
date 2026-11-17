@@ -1,14 +1,35 @@
-// The subject library in the sidebar, the subject menu, the add-subject dialog,
-// and the dashboard metrics above the timer.
+// The subject library in the sidebar (grouped by term), the subject menu, the
+// add/edit subject dialog, and the dashboard metrics above the timer.
 import { icon } from './icons.js';
 import { showToast, confirmDialog, showUndoToast } from './notify.js';
 import { state, activeCourses, archivedCourses, getActiveCourse, setActiveCourse, reloadData, courseById } from './state.js';
 import { escapeHtml, formatHM, formatCompact, emptyState, localDateKey, errorText } from './format.js';
+import { SUBJECT_COLORS, COLOR_NAMES, courseColor, nextAutoColor, swatch, allTerms } from './colors.js';
 import { stopIfRunning } from './timer.js';
-import { renderExams, examTag } from './exams.js';
+import { renderExams, examTag, examSoon } from './exams.js';
 
-let editingCourseId = null;
 let showArchived = false;
+
+// Terms folded away in the library. Remembered per computer; losing it is harmless.
+const COLLAPSED_KEY = 'inmo.collapsedTerms';
+const collapsedTerms = new Set(readCollapsed());
+
+function readCollapsed() {
+  try {
+    const list = JSON.parse(localStorage.getItem(COLLAPSED_KEY) || '[]');
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCollapsed() {
+  try {
+    localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...collapsedTerms]));
+  } catch {
+    // Storage unavailable: the library just opens every term next time.
+  }
+}
 
 export function renderSubjects() {
   renderFirstRun();
@@ -26,24 +47,11 @@ function renderFirstRun() {
 
 function courseRow(course) {
   const id = escapeHtml(course.id);
-  if (editingCourseId === course.id) {
-    return `
-      <div class="course-item active course-edit" onclick="event.stopPropagation()">
-        <input type="text" id="edit-title-${id}" value="${escapeHtml(course.title)}" placeholder="Subject title" aria-label="Subject title"
-          onkeydown="if (event.key === 'Enter') window.saveCourseInfo('${id}'); if (event.key === 'Escape') window.cancelCourseEdit();">
-        <div class="course-edit-row">
-          <input type="text" id="edit-code-${id}" value="${escapeHtml(course.code)}" placeholder="Code" aria-label="Course code"
-            onkeydown="if (event.key === 'Enter') window.saveCourseInfo('${id}'); if (event.key === 'Escape') window.cancelCourseEdit();">
-          <button class="btn-primary" onclick="window.saveCourseInfo('${id}')">Save</button>
-          <button class="btn-secondary" onclick="window.cancelCourseEdit()">Cancel</button>
-        </div>
-      </div>`;
-  }
   return `
-    <div class="course-item ${state.activeCourseId === course.id ? 'active' : ''}" id="course-row-${id}">
+    <div class="course-item ${state.activeCourseId === course.id ? 'active' : ''}" id="course-row-${id}" style="--subject-color: ${courseColor(course)};">
       <div class="course-info" onclick="window.selectCourse('${id}')">
-        <div class="title">${escapeHtml(course.title)}</div>
-        <div class="code">${escapeHtml(course.code)} • ${formatHM(course.total_seconds)}${examTag(course) ? ` • <span class="exam-tag">${examTag(course)}</span>` : ''}</div>
+        <div class="title">${swatch(course)}<span class="title-text">${escapeHtml(course.title)}</span>${examTag(course) ? `<span class="exam-pill ${examSoon(course) ? 'soon' : ''}">${examTag(course)}</span>` : ''}</div>
+        <div class="code">${escapeHtml(course.code)} · ${formatHM(course.total_seconds)}</div>
       </div>
       <div class="course-actions">
         <button class="icon-btn" title="Edit subject" aria-label="Edit subject" onclick="event.stopPropagation(); window.enableCourseEdit('${id}')">${icon('pencil', 14)}</button>
@@ -57,8 +65,8 @@ function archivedRow(course) {
   return `
     <div class="course-item archived">
       <div class="course-info">
-        <div class="title">${escapeHtml(course.title)}</div>
-        <div class="code">${escapeHtml(course.code)} • ${formatHM(course.total_seconds)}</div>
+        <div class="title">${swatch(course)}<span class="title-text">${escapeHtml(course.title)}</span></div>
+        <div class="code">${escapeHtml(course.code)} · ${formatHM(course.total_seconds)}${course.term ? ` · ${escapeHtml(course.term)}` : ''}</div>
       </div>
       <div class="course-actions">
         <button class="icon-btn" title="Restore subject" aria-label="Restore subject" onclick="window.handleRestoreCourse('${id}')">${icon('archive-restore', 14)}</button>
@@ -67,13 +75,49 @@ function archivedRow(course) {
     </div>`;
 }
 
+// Library groups: one per term, the newest first, then subjects with no term.
+// Without any terms there's a single unnamed group.
+function libraryGroups() {
+  const active = activeCourses();
+  const terms = allTerms(active);
+  if (terms.length === 0) return [{ term: null, courses: active }];
+  const groups = terms.map(term => ({ term, courses: active.filter(c => c.term === term) }));
+  const loose = active.filter(c => !c.term);
+  if (loose.length) groups.push({ term: '', courses: loose });
+  return groups;
+}
+
+// The subjects in the order the library shows them, folded terms left out.
+// Alt+Up/Down steps through this.
+export function libraryOrder() {
+  return libraryGroups()
+    .filter(g => g.term === null || !collapsedTerms.has(g.term))
+    .flatMap(g => g.courses);
+}
+
+function groupHtml(group) {
+  if (group.term === null) return group.courses.map(courseRow).join('');
+  const name = group.term || 'No term';
+  const open = !collapsedTerms.has(group.term);
+  const total = group.courses.reduce((sum, c) => sum + (c.total_seconds || 0), 0);
+  return `
+    <button class="term-header" onclick="window.toggleTermGroup(this.dataset.term)" data-term="${escapeHtml(group.term)}" aria-expanded="${open}">
+      ${icon(open ? 'chevron-down' : 'chevron-right', 14)}
+      <span class="term-name">${escapeHtml(name)}</span>
+      <span class="term-meta">${group.courses.length} · ${formatCompact(total)}</span>
+    </button>
+    ${open ? group.courses.map(courseRow).join('') : ''}`;
+}
+
 function renderCourseList() {
   const list = document.getElementById('course-list');
   if (!list) return;
   const active = activeCourses();
   const archived = archivedCourses();
 
-  let html = active.length ? active.map(courseRow).join('') : emptyState('book-open', 'No subjects yet', 'Add one with the + button.');
+  let html = active.length
+    ? libraryGroups().map(groupHtml).join('')
+    : emptyState('book-open', 'No subjects yet', 'Add one with the + button.');
   if (archived.length) {
     html += `
       <button class="archived-toggle" onclick="window.toggleArchivedList()" aria-expanded="${showArchived}">
@@ -82,14 +126,6 @@ function renderCourseList() {
     if (showArchived) html += archived.map(archivedRow).join('');
   }
   list.innerHTML = html;
-
-  if (editingCourseId) {
-    const input = document.getElementById(`edit-title-${editingCourseId}`);
-    if (input) {
-      input.focus();
-      input.select();
-    }
-  }
 }
 
 export function toggleArchivedList() {
@@ -97,12 +133,20 @@ export function toggleArchivedList() {
   renderCourseList();
 }
 
+export function toggleTermGroup(term) {
+  if (collapsedTerms.has(term)) collapsedTerms.delete(term);
+  else collapsedTerms.add(term);
+  saveCollapsed();
+  renderCourseList();
+}
+
 export function renderTimerCourseBadge() {
   const el = document.getElementById('timer-course-badge');
   if (!el) return;
   const course = getActiveCourse();
+  el.style.setProperty('--subject-color', courseColor(course));
   el.innerHTML = course
-    ? `<span class="badge-code">${escapeHtml(course.code)}</span> <span class="badge-sep">—</span> <span class="badge-title">${escapeHtml(course.title)}</span>`
+    ? `${swatch(course)}<span class="badge-code">${escapeHtml(course.code)}</span> <span class="badge-sep">—</span> <span class="badge-title">${escapeHtml(course.title)}</span>`
     : '<span class="badge-none">No subject selected</span>';
 }
 
@@ -111,32 +155,6 @@ export async function selectCourse(id) {
   setActiveCourse(id);
   await reloadData();
   window.switchToTimerPage();
-}
-
-export function enableCourseEdit(courseId) {
-  editingCourseId = courseId;
-  renderCourseList();
-}
-
-export function cancelCourseEdit() {
-  editingCourseId = null;
-  renderCourseList();
-}
-
-export async function saveCourseInfo(courseId) {
-  const title = document.getElementById(`edit-title-${courseId}`)?.value.trim();
-  const code = document.getElementById(`edit-code-${courseId}`)?.value.trim();
-  if (!title || !code) {
-    showToast('Title and code are both required', { type: 'error' });
-    return;
-  }
-  try {
-    await window.api.updateCourse({ courseId, title, code });
-    editingCourseId = null;
-    await reloadData();
-  } catch (err) {
-    showToast('Could not save changes', { message: errorText(err), type: 'error' });
-  }
 }
 
 export async function handleArchiveCourse(courseId) {
@@ -174,7 +192,7 @@ export async function handleDeleteCourse(courseId) {
   const confirmed = await confirmDialog({
     title: `Delete ${course.title}?`,
     message: 'Its tasks and all of its logged sessions will be deleted too. To keep its history, archive it instead.',
-    confirmLabel: 'Delete Subject',
+    confirmLabel: 'Delete subject',
   });
   if (!confirmed) return;
   try {
@@ -191,8 +209,8 @@ export async function handleResetActiveCourse() {
   if (!course) return;
   const confirmed = await confirmDialog({
     title: `Reset time for ${course.title}?`,
-    message: 'All of its logged sessions will be deleted and its total will go back to 0h 0m.',
-    confirmLabel: 'Reset Time',
+    message: 'All of its logged sessions will be deleted and its total will go back to 0m.',
+    confirmLabel: 'Reset time',
   });
   if (!confirmed) return;
   const r = await window.api.resetCourseTime(course.id);
@@ -213,56 +231,149 @@ export function toggleSubjectMenu(event) {
   document.getElementById('subject-menu-btn').setAttribute('aria-expanded', String(isOpen));
 }
 
-// ---------- Add subject dialog ----------
+// ---------- Add / edit subject dialog ----------
 
-export function openModal() {
-  document.getElementById('modal').classList.add('open');
-  document.getElementById('modal-title').focus();
+function colorOption(value, color, label, checked) {
+  return `
+    <label class="color-option" title="${escapeHtml(label)}">
+      <input type="radio" name="subject-color" value="${value}" ${checked ? 'checked' : ''} aria-label="${escapeHtml(label)}">
+      <span style="background: ${color};"></span>
+    </label>`;
 }
 
-export function closeModal() {
-  document.getElementById('modal').classList.remove('open');
+// courseId: edit that subject; omitted: add a new one.
+export function openSubjectDialog(courseId) {
+  const editing = courseId ? courseById(courseId) : null;
+  if (courseId && !editing) return;
+  const current = editing?.color || '';
+  const isPreset = !current || SUBJECT_COLORS.includes(current);
+  // What "Automatic" gives: a color no other subject uses, when there is one.
+  const autoColor = editing && !editing.color ? courseColor(editing) : nextAutoColor();
+  // The newest term is the likely one for a new subject.
+  const terms = allTerms();
+  const term = editing ? editing.term || '' : terms[0] || '';
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay open';
+  overlay.innerHTML = `
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="subject-dialog-title">
+      <h2 id="subject-dialog-title">${editing ? 'Edit subject' : 'Add a subject'}</h2>
+      <div class="form-group">
+        <label for="subject-title">Title</label>
+        <input type="text" id="subject-title" maxlength="120" placeholder="e.g. Database Systems" value="${escapeHtml(editing?.title || '')}">
+      </div>
+      <div class="form-row form-row-2">
+        <div class="form-group">
+          <label for="subject-code">Course code</label>
+          <input type="text" id="subject-code" maxlength="40" placeholder="e.g. CS2050" value="${escapeHtml(editing?.code || '')}">
+        </div>
+        <div class="form-group">
+          <label for="subject-term">Term (optional)</label>
+          <input type="text" id="subject-term" maxlength="40" placeholder="e.g. Fall 2026" value="${escapeHtml(term)}" list="subject-terms" autocomplete="off">
+          <datalist id="subject-terms">${terms.map(t => `<option value="${escapeHtml(t)}">`).join('')}</datalist>
+        </div>
+      </div>
+      <div class="form-group">
+        <span class="form-label">Color</span>
+        <div class="color-picker" role="radiogroup" aria-label="Color">
+          <label class="color-option color-auto" title="Automatic">
+            <input type="radio" name="subject-color" value="" ${current ? '' : 'checked'} aria-label="Automatic">
+            <span style="background: ${autoColor};">A</span>
+          </label>
+          ${SUBJECT_COLORS.map((c, i) => colorOption(c, c, COLOR_NAMES[i], current === c)).join('')}
+          <label class="color-option color-custom" title="Custom color">
+            <input type="radio" name="subject-color" value="custom" ${isPreset ? '' : 'checked'} aria-label="Custom color">
+            <span style="background: ${isPreset ? 'conic-gradient(#e66767, #c98500, #199e70, #3987e5, #9085e9, #e66767)' : current};"></span>
+            <input type="color" id="subject-color-custom" value="${isPreset ? '#3987e5' : current}" tabindex="-1" aria-hidden="true">
+          </label>
+        </div>
+        <p class="form-hint">Used for this subject in the library, the timer, history and every chart. Terms group the library, and Analytics can show one term at a time.</p>
+      </div>
+      <p class="modal-text form-error is-hidden" id="subject-error"></p>
+      <div class="modal-actions">
+        <button class="btn-secondary" data-action="cancel">Cancel</button>
+        <button class="btn-primary" data-action="save">${editing ? 'Save' : 'Add subject'}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const $ = sel => overlay.querySelector(sel);
+  const picker = $('#subject-color-custom');
+  const customRadio = overlay.querySelector('input[name="subject-color"][value="custom"]');
+  // Clicking the custom swatch opens the system color picker. (On the swatch,
+  // not the radio, so stepping through the colors with arrow keys doesn't.)
+  customRadio.nextElementSibling.addEventListener('click', () => picker.click());
+  picker.addEventListener('input', () => {
+    customRadio.checked = true;
+    customRadio.nextElementSibling.style.background = picker.value;
+  });
+
+  const fail = (text) => {
+    const el = $('#subject-error');
+    el.innerText = text;
+    el.classList.remove('is-hidden');
+  };
+  const close = () => {
+    document.removeEventListener('keydown', onKey, true);
+    overlay.remove();
+  };
+  const save = async () => {
+    const title = $('#subject-title').value.trim();
+    const code = $('#subject-code').value.trim();
+    const termValue = $('#subject-term').value.trim() || null;
+    const choice = overlay.querySelector('input[name="subject-color"]:checked')?.value || '';
+    const color = choice === 'custom' ? picker.value : choice || null;
+    if (!title || !code) return fail('Title and code are both required.');
+    try {
+      if (editing) {
+        await window.api.updateCourse({ courseId: editing.id, title, code, term: termValue, color });
+        close();
+        await reloadData();
+      } else {
+        const created = await window.api.addCourse(title, code, termValue, color);
+        close();
+        await stopIfRunning();
+        setActiveCourse(created.id);
+        // A subject added to a folded term should be visible.
+        if (termValue && collapsedTerms.delete(termValue)) saveCollapsed();
+        await reloadData();
+      }
+    } catch (err) {
+      fail(errorText(err));
+    }
+  };
+  const onKey = (e) => {
+    if (e.key === 'Escape') { e.stopPropagation(); close(); }
+    if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.type !== 'radio') { e.preventDefault(); save(); }
+  };
+  document.addEventListener('keydown', onKey, true);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay || e.target.dataset.action === 'cancel') close();
+    if (e.target.dataset.action === 'save') save();
+  });
+  const first = $('#subject-title');
+  first.focus();
+  if (editing) first.select();
 }
 
-export async function handleAddCourse() {
-  const titleInput = document.getElementById('modal-title');
-  const codeInput = document.getElementById('modal-code');
-  const title = titleInput.value.trim();
-  const code = codeInput.value.trim();
-  if (!title || !code) {
-    showToast('Title and code are both required', { type: 'error' });
-    return;
-  }
-  try {
-    const created = await window.api.addCourse(title, code);
-    closeModal();
-    titleInput.value = '';
-    codeInput.value = '';
-    await stopIfRunning();
-    setActiveCourse(created.id);
-    await reloadData();
-  } catch (err) {
-    showToast('Could not add the subject', { message: errorText(err), type: 'error' });
-  }
-}
-
-// ---------- Dashboard metrics ----------
+// ---------- Timer page header ----------
 
 function updateMetricsDashboard() {
+  const date = document.getElementById('focus-date');
+  if (date) date.innerText = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  const streak = currentStreak();
+  const chip = document.getElementById('streak-chip');
+  if (chip) {
+    chip.classList.toggle('on', streak > 0);
+    chip.title = streak > 0 ? 'Days in a row with some study' : 'Study today to start a streak';
+  }
+  const streakVal = document.getElementById('current-streak-val');
+  if (streakVal) streakVal.innerText = streak === 0 ? 'No streak yet' : `${streak}-day streak`;
+}
+
+// Days in a row with study, counting back from today (or yesterday, if today has none yet).
+export function currentStreak() {
   const todayStr = localDateKey(new Date());
-  const todayRecord = state.dailyStats.find(d => d.date === todayStr);
-  const todaySeconds = todayRecord ? todayRecord.total_seconds : 0;
-  const goal = state.dailyGoalSecs;
-  const progressPercent = Math.min(100, Math.round((todaySeconds / goal) * 100));
-
-  const progressText = document.getElementById('daily-progress-text');
-  const progressFill = document.getElementById('daily-progress-fill');
-  if (progressText) progressText.innerText = `${Math.floor(todaySeconds / 60)}m / ${goal / 60}m`;
-  const goalLabel = document.getElementById('daily-goal-label');
-  if (goalLabel) goalLabel.innerText = `DAILY GOAL (${formatCompact(goal).toUpperCase()} TARGET)`;
-  if (progressFill) progressFill.style.width = `${progressPercent}%`;
-
-  // Days in a row with study, counting back from today (or yesterday, if today has none yet).
   let streak = 0;
   const d = new Date();
   for (;;) {
@@ -277,6 +388,5 @@ function updateMetricsDashboard() {
       break;
     }
   }
-  const streakVal = document.getElementById('current-streak-val');
-  if (streakVal) streakVal.innerText = streak === 0 ? 'No streak yet' : `${streak} ${streak === 1 ? 'day' : 'days'} in a row`;
+  return streak;
 }

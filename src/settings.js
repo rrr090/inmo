@@ -24,6 +24,7 @@ const TOGGLE_SETTINGS = {
   notify_away: true,
   notify_session: true,
   pomodoro_sound: true,
+  weekly_review: true,
 };
 
 async function readToggle(key) {
@@ -95,7 +96,7 @@ export async function saveNumberSetting(key, input) {
   }
   if (key === 'daily_goal_min') {
     state.dailyGoalSecs = n * 60;
-    await reloadData(); // redraws the goal bar and the trend chart's goal line
+    await reloadData(); // redraws the timer's ring and the trend chart's goal line
   }
 }
 

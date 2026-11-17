@@ -7,8 +7,9 @@
   window.api = {
     // Subjects
     getCourses: () => invoke('get_courses'),
-    addCourse: (title, code) => invoke('add_course', { title, code }),
-    updateCourse: ({ courseId, title, code }) => invoke('update_course', { courseId, title, code }),
+    // term: "Fall 2026" or null; color: "#rrggbb" or null for the automatic one.
+    addCourse: (title, code, term, color) => invoke('add_course', { title, code, term, color }),
+    updateCourse: ({ courseId, title, code, term, color }) => invoke('update_course', { courseId, title, code, term, color }),
     deleteCourse: (courseId) => invoke('delete_course', { courseId }),
     setCourseArchived: (courseId, archived) => invoke('set_course_archived', { courseId, archived }),
     resetCourseTime: (courseId) => invoke('reset_course_time', { courseId }),
@@ -27,8 +28,13 @@
 
     // Tasks
     getTasks: (courseId) => invoke('get_tasks', { courseId }),
-    addTask: (courseId, text) => invoke('add_task', { courseId, text }),
+    // dueDate: YYYY-MM-DD or null.
+    addTask: (courseId, text, dueDate) => invoke('add_task', { courseId, text, dueDate }),
+    updateTask: (taskId, text, dueDate) => invoke('update_task', { taskId, text, dueDate }),
     toggleTask: (taskId) => invoke('toggle_task', { taskId }),
+    reorderTasks: (courseId, ids) => invoke('reorder_tasks', { courseId, ids }),
+    getDueTasks: (until) => invoke('get_due_tasks', { until }),
+    getCompletedTasks: (from, to) => invoke('get_completed_tasks', { from, to }),
     deleteTask: (taskId) => invoke('delete_task', { taskId }),
     getTaskStats: () => invoke('get_task_stats'),
 
@@ -44,8 +50,11 @@
     timerGet: () => invoke('timer_get'),
     timerStart: (courseId, mode) => invoke('timer_start', { courseId, mode }),
     timerStop: () => invoke('timer_stop'),
+    timerPause: () => invoke('timer_pause'),
+    timerResume: () => invoke('timer_resume'),
     timerResolveIdle: (keep) => invoke('timer_resolve_idle', { keep }),
     timerSetNote: (note) => invoke('timer_set_note', { note }),
+    timerSetTask: (taskId, courseId) => invoke('timer_set_task', { taskId, courseId }),
     onTimerState: (callback) => listen('timer-state', (event) => callback(event.payload)),
     onTimerEvent: (callback) => listen('timer-event', (event) => callback(event.payload)),
     takeRecoveryResult: () => invoke('take_recovery_result'),

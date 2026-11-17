@@ -4,13 +4,15 @@ import { renderIcons } from './icons.js';
 import { showToast } from './notify.js';
 import { state, onDataChanged, reloadData, getActiveCourse } from './state.js';
 import { formatDuration } from './format.js';
-import { initTimer, toggleTimer, setMode, renderModeTabs, updateInPageWidget, handleNoteInput, saveNote } from './timer.js';
+import { initTimer, toggleTimer, togglePause, setMode, renderModeTabs, updateInPageWidget, handleNoteInput, saveNote, renderTimerRing } from './timer.js';
 import * as exams from './exams.js';
 import * as subjects from './subjects.js';
 import * as tasks from './tasks.js';
 import * as analytics from './analytics.js';
 import * as history from './history.js';
 import * as settings from './settings.js';
+import { maybeShowWeeklyReview, openWeeklyReview } from './review.js';
+import { initShortcuts, openShortcutHelp } from './shortcuts.js';
 
 async function init() {
   renderIcons();
@@ -21,6 +23,7 @@ async function init() {
 
     onDataChanged(subjects.renderSubjects);
     onDataChanged(tasks.loadTasks);
+    onDataChanged(renderTimerRing);
     onDataChanged(() => analytics.isAnalyticsPageActive() && analytics.renderAnalyticsPage());
     onDataChanged(() => history.isHistoryPageActive() && history.renderHistory());
 
@@ -29,6 +32,8 @@ async function init() {
     await reloadData();
     await showRecoveredSession();
     settings.listenForUpdates();
+    initShortcuts();
+    await maybeShowWeeklyReview();
   } catch (err) {
     console.error('Initialization error:', err);
     showToast('Something went wrong loading inmo', { message: String(err.message || err), type: 'error', duration: 0 });
@@ -69,18 +74,14 @@ function withActiveCourse(fn) {
 
 document.addEventListener('click', subjects.closeSubjectMenu);
 document.addEventListener('keydown', (event) => {
-  const addSubjectOpen = document.getElementById('modal').classList.contains('open');
-  if (event.key === 'Escape') {
-    subjects.closeSubjectMenu();
-    if (addSubjectOpen) subjects.closeModal();
-  }
-  if (event.key === 'Enter' && addSubjectOpen && event.target.tagName === 'INPUT') subjects.handleAddCourse();
+  if (event.key === 'Escape') subjects.closeSubjectMenu();
 });
 
 Object.assign(window, {
   switchPage,
   switchToTimerPage: () => switchPage('timer-page'),
   toggleTimer,
+  togglePause,
   setMode,
   handleNoteInput,
   saveNote,
@@ -90,9 +91,8 @@ Object.assign(window, {
   useExamPaceAsGoal: exams.useExamPaceAsGoal,
   // Subjects
   selectCourse: subjects.selectCourse,
-  enableCourseEdit: subjects.enableCourseEdit,
-  cancelCourseEdit: subjects.cancelCourseEdit,
-  saveCourseInfo: subjects.saveCourseInfo,
+  enableCourseEdit: (courseId) => subjects.openSubjectDialog(courseId),
+  toggleTermGroup: subjects.toggleTermGroup,
   handleArchiveCourse: subjects.handleArchiveCourse,
   handleRestoreCourse: subjects.handleRestoreCourse,
   handleDeleteCourse: subjects.handleDeleteCourse,
@@ -101,14 +101,17 @@ Object.assign(window, {
   handleResetActiveCourse: subjects.handleResetActiveCourse,
   toggleArchivedList: subjects.toggleArchivedList,
   toggleSubjectMenu: subjects.toggleSubjectMenu,
-  openModal: subjects.openModal,
-  closeModal: subjects.closeModal,
-  handleAddCourse: subjects.handleAddCourse,
+  openModal: () => subjects.openSubjectDialog(),
   // Tasks
   handleAddTask: tasks.handleAddTask,
   handleToggleTask: tasks.handleToggleTask,
   handleDeleteTask: tasks.handleDeleteTask,
+  handleWorkOnTask: tasks.handleWorkOnTask,
+  clearWorkingOn: tasks.clearWorkingOn,
+  openTaskDialog: tasks.openTaskDialog,
   // Analytics
+  setAnalyticsTerm: analytics.setAnalyticsTerm,
+  openWeeklyReview: () => openWeeklyReview(),
   setTrendRange: analytics.setTrendRange,
   setTrendMode: analytics.setTrendMode,
   editCourseGoal: analytics.editCourseGoal,
@@ -133,6 +136,7 @@ Object.assign(window, {
   handleCheckUpdates: settings.handleCheckUpdates,
   saveToggleSetting: settings.saveToggleSetting,
   openLink: settings.openLink,
+  openShortcutHelp,
 });
 
 init();

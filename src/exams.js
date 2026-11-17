@@ -4,6 +4,7 @@ import { icon } from './icons.js';
 import { showToast } from './notify.js';
 import { activeCourses, courseById, reloadData } from './state.js';
 import { escapeHtml, formatCompact, localDateKey, parseDateKey, fmtDay, errorText } from './format.js';
+import { swatch } from './colors.js';
 
 const DAY_MS = 86400000;
 
@@ -20,11 +21,16 @@ function whenText(days) {
 }
 
 // A short tag for the subject library, for exams in the next 30 days.
+// Within a week it's highlighted (see examSoon).
 export function examTag(course) {
   if (!course.exam_date) return '';
   const days = daysUntil(course.exam_date);
   if (days < 0 || days > 30) return '';
-  return days === 0 ? 'exam today' : days === 1 ? 'exam tomorrow' : `exam in ${days}d`;
+  return days === 0 ? 'Exam today' : days === 1 ? 'Exam tomorrow' : `Exam in ${days}d`;
+}
+
+export function examSoon(course) {
+  return Boolean(course.exam_date) && daysUntil(course.exam_date) >= 0 && daysUntil(course.exam_date) <= 7;
 }
 
 // How much is left of a subject's hours target, and how fast it has to go.
@@ -74,7 +80,7 @@ export function renderExams() {
           <span class="exam-date">${escapeHtml(fmtDay(parseDateKey(c.exam_date), true))}</span>
         </div>
         <div class="exam-body">
-          <div class="exam-title"><b>${escapeHtml(c.code)}</b> — ${escapeHtml(c.title)}</div>
+          <div class="exam-title">${swatch(c)}<b>${escapeHtml(c.code)}</b> — ${escapeHtml(c.title)}</div>
           ${paceHtml}
         </div>
         <button class="icon-btn" title="Edit exam" aria-label="Edit exam" onclick="window.openExamDialog('${id}')">${icon('pencil', 14)}</button>
@@ -110,13 +116,13 @@ export function openExamDialog(courseId) {
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="exam-dialog-title">
       <h2 id="exam-dialog-title">Exam for ${escapeHtml(course.code)}</h2>
       <p class="modal-text">${escapeHtml(course.title)}. The Timer page counts down to it, and with a target it shows how much to study each week to get there.</p>
-      <div class="form-row">
+      <div class="form-row form-row-2">
         <div class="form-group">
           <label for="exam-date">Exam date</label>
-          <input type="date" id="exam-date" value="${escapeHtml(course.exam_date || '')}" min="${localDateKey(new Date())}">
+          <input type="date" id="exam-date" required value="${escapeHtml(course.exam_date || '')}" min="${localDateKey(new Date())}">
         </div>
         <div class="form-group">
-          <label for="exam-target">Hours to study in total (optional)</label>
+          <label for="exam-target">Hours to study (optional)</label>
           <input type="number" id="exam-target" min="0" max="2000" step="0.5" value="${targetHours}" placeholder="e.g. 40">
         </div>
       </div>

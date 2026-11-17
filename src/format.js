@@ -7,10 +7,11 @@ export function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 }
 
+// "50h 35m", "56m": no "0h" in front of short times.
 export function formatHM(totalSecs) {
   const hrs = Math.floor(totalSecs / 3600);
   const mins = Math.floor((totalSecs % 3600) / 60);
-  return `${hrs}h ${mins}m`;
+  return hrs ? `${hrs}h ${mins}m` : `${mins}m`;
 }
 
 // For messages, where "0h 0m" would read as if nothing was saved.

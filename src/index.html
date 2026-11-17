@@ -24,16 +24,16 @@
         <div class="brand-icon"><span data-icon="atom" data-size="18"></span></div>
         <span>INMO</span>
       </div>
-      <div class="nav-link active" data-page="timer-page" onclick="switchPage('timer-page', this)"><span data-icon="timer"></span>Focus Engine</div>
-      <div class="nav-link" data-page="analytics-page" onclick="switchPage('analytics-page', this)"><span data-icon="chart-column"></span>Analytics & Charts</div>
-      <div class="nav-link" data-page="history-page" onclick="switchPage('history-page', this)"><span data-icon="history"></span>Session History</div>
+      <div class="nav-link active" data-page="timer-page" onclick="switchPage('timer-page', this)"><span data-icon="timer"></span>Timer</div>
+      <div class="nav-link" data-page="analytics-page" onclick="switchPage('analytics-page', this)"><span data-icon="chart-column"></span>Analytics</div>
+      <div class="nav-link" data-page="history-page" onclick="switchPage('history-page', this)"><span data-icon="history"></span>History</div>
       <div class="nav-link" data-page="settings-page" onclick="switchPage('settings-page', this)"><span data-icon="settings"></span>Settings</div>
     </div>
 
     <div class="nav-card" style="flex: 1; min-height: 0;">
       <div class="library-header">
-        <span>SUBJECT LIBRARY</span>
-        <button class="add-btn" onclick="openModal()" title="Add Subject" aria-label="Add Subject"><span data-icon="plus" data-size="14"></span></button>
+        <span>Subjects</span>
+        <button class="add-btn" onclick="openModal()" title="Add a subject (A)" aria-label="Add a subject"><span data-icon="plus" data-size="14"></span></button>
       </div>
       <div id="course-list" style="display:flex; flex-direction:column; gap:4px; overflow-y:auto; flex:1; min-height:0;"></div>
     </div>
@@ -48,86 +48,110 @@
         <div class="first-run-icon"><span data-icon="book-open" data-size="28"></span></div>
         <h2>Welcome to inmo</h2>
         <p>Add your first subject to start tracking your study time.</p>
-        <button class="btn-primary" onclick="openModal()">Add Subject</button>
+        <button class="btn-primary" onclick="openModal()">Add a subject</button>
       </div>
 
       <div class="page-stack" id="focus-content">
-      <div class="dashboard-metrics">
-        <div class="metric-card">
-          <div class="metric-header">
-            <span class="label-with-icon"><span data-icon="flame" data-size="14"></span>STUDY STREAK</span>
-          </div>
-          <div class="metric-value" id="current-streak-val">No streak yet</div>
+      <div class="page-header">
+        <div>
+          <h1>Timer</h1>
+          <p id="focus-date"></p>
         </div>
-        <div class="metric-card">
-          <div class="metric-header">
-            <span class="label-with-icon"><span data-icon="target" data-size="14"></span><span id="daily-goal-label">DAILY GOAL (2H TARGET)</span></span>
-            <span id="daily-progress-text">0m / 120m</span>
-          </div>
-          <div class="progress-bar-bg">
-            <div class="progress-bar-fill" id="daily-progress-fill"></div>
-          </div>
+        <div class="page-actions">
+          <span class="streak-chip" id="streak-chip"><span data-icon="flame" data-size="14"></span><span id="current-streak-val">No streak yet</span></span>
         </div>
       </div>
 
+      <div class="focus-grid">
+      <div class="focus-col">
       <div class="timer-section">
-        <div class="timer-header-row">
-          <div class="mode-selector">
-            <button class="mode-tab active" data-mode="stopwatch" onclick="setMode('stopwatch')">Stopwatch</button>
-            <button class="mode-tab" data-mode="pomodoro" onclick="setMode('pomodoro')">Pomodoro (25m)</button>
-          </div>
-          <div>
-            <span class="target-label">TARGET SUBJECT:</span>
-            <span id="timer-course-badge" class="timer-course-badge"></span>
+        <div class="mode-selector">
+          <button class="mode-tab active" data-mode="stopwatch" onclick="setMode('stopwatch')">Stopwatch</button>
+          <button class="mode-tab" data-mode="pomodoro" onclick="setMode('pomodoro')">Pomodoro (25m)</button>
+        </div>
+        <span id="timer-course-badge" class="timer-course-badge" title="The subject the timer logs to. Pick another in the library."></span>
+
+        <div class="timer-ring" id="timer-ring">
+          <svg viewBox="0 0 120 120" aria-hidden="true">
+            <circle class="timer-ring-track" cx="60" cy="60" r="54"></circle>
+            <circle class="timer-ring-fill" id="timer-ring-fill" cx="60" cy="60" r="54" pathLength="100"></circle>
+          </svg>
+          <div class="timer-ring-center">
+            <div class="time-display" id="timer-display">00:00:00</div>
+            <div class="timer-ring-caption" id="timer-ring-caption"></div>
           </div>
         </div>
-
-        <div class="time-display" id="timer-display">00:00:00</div>
         <div class="timer-status" id="timer-status"></div>
-        <input type="text" id="session-note" class="session-note" maxlength="500" placeholder="What are you working on? (optional)"
-          aria-label="What you're working on" oninput="handleNoteInput(this)" onblur="saveNote(this)" onkeydown="if (event.key === 'Enter') this.blur()">
 
-        <button class="play-btn" id="timer-btn" title="Start" onclick="toggleTimer()">
-          <svg id="play-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-        </button>
+        <input type="text" id="session-note" class="session-note" maxlength="500" placeholder="What are you working on? (optional)"
+          aria-label="What you're working on" oninput="handleNoteInput(this)" onblur="saveNote(this)" onkeydown="if (event.key === 'Enter' || event.key === 'Escape') this.blur()">
+        <div class="working-on is-hidden" id="working-on">
+          <span data-icon="target" data-size="14"></span>
+          <span>Working on <b id="working-on-text"></b></span>
+          <button class="icon-btn" onclick="clearWorkingOn()" title="Stop working on this task" aria-label="Stop working on this task"><span data-icon="x" data-size="13"></span></button>
+        </div>
+
+        <div class="timer-controls">
+          <button class="pause-btn is-hidden" id="pause-btn" title="Pause" aria-label="Pause" onclick="togglePause()">
+            <svg id="pause-icon" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+          </button>
+          <button class="play-btn" id="timer-btn" title="Start" onclick="toggleTimer()">
+            <svg id="play-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          </button>
+        </div>
       </div>
 
       <div class="section-box is-hidden" id="exams-box">
         <h3 class="label-with-icon"><span data-icon="calendar" data-size="16"></span>Upcoming exams</h3>
         <div id="exams-list"></div>
       </div>
+      </div>
 
+      <div class="focus-col">
       <div class="section-box" id="active-course-todos-box">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-          <h3 id="tasks-header-title" style="margin: 0;">To-Do List</h3>
+        <div class="section-head">
+          <h3 id="tasks-header-title">Tasks</h3>
           <div class="menu-wrap">
             <button class="icon-btn" id="subject-menu-btn" onclick="toggleSubjectMenu(event)" title="Subject options" aria-label="Subject options" aria-haspopup="menu" aria-expanded="false"><span data-icon="ellipsis"></span></button>
             <div class="menu is-hidden" id="subject-menu" role="menu">
               <button role="menuitem" onclick="handleExamForActiveCourse()"><span data-icon="calendar" data-size="14"></span>Exam date…</button>
-              <button role="menuitem" onclick="handleResetActiveCourse()"><span data-icon="rotate-ccw" data-size="14"></span>Reset Time</button>
-              <button role="menuitem" onclick="handleArchiveActiveCourse()"><span data-icon="archive" data-size="14"></span>Archive Subject</button>
-              <button role="menuitem" class="danger" onclick="handleDeleteActiveCourse()"><span data-icon="trash-2" data-size="14"></span>Delete Subject</button>
+              <button role="menuitem" onclick="handleResetActiveCourse()"><span data-icon="rotate-ccw" data-size="14"></span>Reset time</button>
+              <button role="menuitem" onclick="handleArchiveActiveCourse()"><span data-icon="archive" data-size="14"></span>Archive subject</button>
+              <button role="menuitem" class="danger" onclick="handleDeleteActiveCourse()"><span data-icon="trash-2" data-size="14"></span>Delete subject</button>
             </div>
           </div>
         </div>
         <div class="task-input-row">
-          <input type="text" id="new-task-text" placeholder="Add a task for this subject..." onkeydown="if(event.key==='Enter') handleAddTask()">
-          <button onclick="handleAddTask()">Add Task</button>
+          <input type="text" id="new-task-text" maxlength="300" placeholder="Add a task…" onkeydown="if (event.key === 'Enter') handleAddTask(); if (event.key === 'Escape') this.blur();">
+          <input type="date" id="new-task-due" data-placeholder="Due date" aria-label="Due date (optional)">
+          <button class="btn-primary task-add-btn" onclick="handleAddTask()" title="Add task" aria-label="Add task"><span data-icon="plus" data-size="16"></span></button>
         </div>
         <div class="task-list" id="task-list"></div>
+      </div>
+
+      <div class="section-box is-hidden" id="due-box">
+        <h3 class="label-with-icon"><span data-icon="calendar-check" data-size="16"></span>Due soon</h3>
+        <div id="due-list"></div>
+      </div>
+      </div>
       </div>
       </div>
     </div>
 
-    <!-- PAGE 2: ANALYTICS & CHARTS -->
+    <!-- PAGE 2: ANALYTICS -->
     <div id="analytics-page" class="page">
-      <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+      <div class="page-header">
         <div>
-          <h1 style="margin: 0 0 4px 0; font-size: 24px; font-weight: 800;">Analytics & Performance Charts</h1>
-          <p style="color: var(--text-sub); margin: 0; font-size: 13px;">Visual trends, weekly comparison, and focus consistency.</p>
+          <h1>Analytics</h1>
+          <p>Where your study time goes, and how it's trending.</p>
         </div>
-        <div id="weekly-comparison-badge" style="background: var(--bg-card); border: 1px solid var(--border-color); padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700;">
-          Week-over-Week: <span style="color: var(--accent);">+0%</span>
+        <div class="page-actions analytics-actions">
+          <label class="term-filter is-hidden" id="term-filter-wrap">
+            <span>Term</span>
+            <select id="term-filter" onchange="setAnalyticsTerm(this.value)" aria-label="Show one term"></select>
+          </label>
+          <button class="btn-outline" onclick="openWeeklyReview()"><span data-icon="calendar-check" data-size="14"></span>Weekly review</button>
+          <div id="weekly-comparison-badge" class="header-badge"></div>
         </div>
       </div>
       
@@ -136,7 +160,7 @@
       <!-- Visual Chart.js Trend Card -->
       <div class="section-box">
         <div class="section-head">
-          <h3 id="trend-title">Focus Trend: Last 7 Days</h3>
+          <h3 id="trend-title">Study time, last 7 days</h3>
           <div class="chart-controls">
             <div class="seg-group" role="group" aria-label="Chart view">
               <button class="seg-btn active" data-trend-mode="total" onclick="setTrendMode('total')">Total</button>
@@ -156,18 +180,18 @@
       </div>
 
       <div class="section-box">
-        <h3>Activity Heatmap (Last 90 Days)</h3>
+        <h3>Activity, last 90 days</h3>
         <div class="heatmap-container" id="heatmap-grid"></div>
       </div>
 
       <div class="analytics-two-col">
         <div class="section-box">
-          <h3>Time by Subject</h3>
+          <h3>Time by subject</h3>
           <p class="section-sub">Share of all study time</p>
           <div id="subject-share"></div>
         </div>
         <div class="section-box">
-          <h3>Weekday Pattern</h3>
+          <h3>Weekday pattern</h3>
           <p class="section-sub">Average hours on each day of the week</p>
           <div class="chart-wrap" style="height: 200px;">
             <canvas id="weekdayChart"></canvas>
@@ -177,7 +201,7 @@
       </div>
 
       <div class="section-box">
-        <h3>When You Study</h3>
+        <h3>When you study</h3>
         <p class="section-sub" id="hour-grid-caption">Total time by weekday and hour</p>
         <div id="hour-grid"></div>
         <div class="scale-legend is-hidden" id="hour-grid-legend" aria-hidden="true">
@@ -187,16 +211,16 @@
         </div>
       </div>
 
-      <h3 style="margin: 0; font-size: 15px;">Subjects</h3>
+      <h3 class="page-subhead">Subjects</h3>
       <div id="analytics-list" class="grid"></div>
     </div>
 
     <!-- PAGE 3: HISTORY -->
     <div id="history-page" class="page">
-      <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+      <div class="page-header">
         <div>
-          <h1 style="margin: 0 0 4px 0; font-size: 24px; font-weight: 800;">Session History</h1>
-          <p style="color: var(--text-sub); margin: 0; font-size: 13px;">Log of your recent completed focus sessions.</p>
+          <h1>History</h1>
+          <p>Every study session, newest first.</p>
         </div>
         <div class="page-actions">
           <button class="btn-outline" onclick="openSessionDialog()"><span data-icon="plus" data-size="14"></span>Add session</button>
@@ -206,16 +230,16 @@
       </div>
       <label class="history-search">
         <span data-icon="search" data-size="14"></span>
-        <input type="search" id="history-search" placeholder="Search notes and subjects" aria-label="Search sessions" oninput="handleHistorySearch(this)">
+        <input type="search" id="history-search" placeholder="Search notes, tasks and subjects" aria-label="Search sessions" oninput="handleHistorySearch(this)">
       </label>
       <div class="section-box" style="padding: 0; overflow: hidden;">
         <table class="history-table">
           <thead>
             <tr>
-              <th>DATE & TIME</th>
-              <th>SUBJECT</th>
-              <th>DURATION</th>
-              <th style="text-align: right;">ACTION</th>
+              <th class="history-time-col">Time</th>
+              <th>Subject</th>
+              <th>Duration</th>
+              <th><span class="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody id="history-table-body"></tbody>
@@ -226,9 +250,11 @@
 
     <!-- PAGE 4: SETTINGS -->
     <div id="settings-page" class="page">
-      <div>
-        <h1 style="margin: 0 0 4px 0; font-size: 24px; font-weight: 800;">Settings</h1>
-        <p style="color: var(--text-sub); margin: 0; font-size: 13px;">Timer, shortcuts, backups and updates.</p>
+      <div class="page-header">
+        <div>
+          <h1>Settings</h1>
+          <p>Timer, shortcuts, backups and updates.</p>
+        </div>
       </div>
 
       <div class="section-box">
@@ -257,7 +283,7 @@
 
       <div class="section-box">
         <h3>Daily goal</h3>
-        <p class="section-sub">The target behind the goal bar on the Timer page and the goal line in Analytics.</p>
+        <p class="section-sub">The target behind the ring on the Timer page and the goal line in Analytics.</p>
         <div class="settings-grid">
           <label class="setting-field">Study <span><input type="number" id="setting-daily_goal_min" min="10" max="1440" onchange="saveNumberSetting('daily_goal_min', this)"> min a day</span></label>
         </div>
@@ -305,6 +331,21 @@
             </div>
           </div>
           <label class="toggle-switch"><input type="checkbox" id="toggle-notify_session" onchange="saveToggleSetting('notify_session', this.checked)"><span class="toggle-slider"></span></label>
+        </div>
+      </div>
+
+      <div class="section-box settings-toggles">
+        <h3>Weekly review</h3>
+        <p class="section-sub">A look back at last week: hours against your goals, each subject, tasks done, and what's coming up. It's also on the Analytics page, any time.</p>
+        <div class="setting-row">
+          <div class="setting-row-info">
+            <span class="setting-row-icon" data-icon="calendar-check"></span>
+            <div>
+              <div class="setting-row-title">Show it at the start of each week</div>
+              <div class="setting-row-desc">The first time you open inmo from Monday on, if you studied the week before</div>
+            </div>
+          </div>
+          <label class="toggle-switch"><input type="checkbox" id="toggle-weekly_review" onchange="saveToggleSetting('weekly_review', this.checked)"><span class="toggle-slider"></span></label>
         </div>
       </div>
 
@@ -362,6 +403,14 @@
       </div>
 
       <div class="section-box">
+        <h3>Keyboard shortcuts</h3>
+        <p class="section-sub">Space starts and stops the timer, Ctrl+1 to Ctrl+4 switch pages, Alt+↑ and Alt+↓ change subject. Press <kbd>?</kbd> anywhere for the full list.</p>
+        <div class="page-actions">
+          <button class="btn-outline" onclick="openShortcutHelp()"><span data-icon="keyboard" data-size="14"></span>Show all shortcuts</button>
+        </div>
+      </div>
+
+      <div class="section-box">
         <h3>Backups</h3>
         <p class="section-sub" id="backup-info"></p>
         <div class="page-actions">
@@ -391,26 +440,8 @@
 
   </div>
 
-  <!-- MODAL: ADD SUBJECT -->
-  <div class="modal-overlay" id="modal">
-    <div class="modal">
-      <h2>Add New Subject</h2>
-      <div class="form-group">
-        <label>Subject Title</label>
-        <input type="text" id="modal-title" placeholder="e.g. Database Systems">
-      </div>
-      <div class="form-group">
-        <label>Course Code</label>
-        <input type="text" id="modal-code" placeholder="e.g. CS2050">
-      </div>
-      <div class="modal-actions">
-        <button class="btn-secondary" onclick="closeModal()">Cancel</button>
-        <button class="btn-primary" onclick="handleAddCourse()">Add Subject</button>
-      </div>
-    </div>
-  </div>
-
   <script src="tauri-api.js"></script>
+  <script src="datepicker.js"></script>
   <script type="module" src="app.js"></script>
 </body>
 </html>

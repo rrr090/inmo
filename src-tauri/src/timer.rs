@@ -96,6 +96,12 @@ pub struct TimerState {
     // What the session is spent on, typed on the Timer page. Kept through a
     // Pomodoro cycle; a manual stop clears it.
     pub note: Option<String>,
+    // The to-do item the session is spent on, if one was picked. Same lifetime
+    // as the note, and always a task of the session's subject.
+    pub task_id: Option<String>,
+    // When the running focus session or break was paused; None while it runs.
+    // Resuming moves `start_ms` forward by the paused stretch, so it isn't counted.
+    pub paused_at: Option<i64>,
 }
 
 impl Default for TimerState {
@@ -113,6 +119,8 @@ impl Default for TimerState {
             last_heartbeat_ms: 0,
             away: None,
             note: None,
+            task_id: None,
+            paused_at: None,
         }
     }
 }
@@ -131,7 +139,8 @@ pub fn format_clock(secs: i64, with_hours: bool) -> String {
 
 impl TimerState {
     pub fn elapsed_secs(&self, now: i64) -> i64 {
-        ((now - self.start_ms) / 1000).max(0)
+        let until = self.paused_at.unwrap_or(now);
+        ((until - self.start_ms) / 1000).max(0)
     }
 
     // What the clock shows: time so far for the stopwatch, time left for a countdown.
@@ -167,6 +176,7 @@ impl TimerState {
             "phase": match self.phase { Phase::Idle => "idle", Phase::Focus => "focus", Phase::Break => "break" },
             "mode": self.mode.as_str(),
             "isStudying": self.phase != Phase::Idle,
+            "paused": self.paused_at.is_some(),
             "courseId": self.course_id,
             "courseLabel": self.course_label(),
             "shownSecs": shown,
@@ -177,6 +187,7 @@ impl TimerState {
             "longBreakEvery": every,
             "awaySecs": self.away.and_then(|a| a.back_ms.map(|b| (b - a.from_ms) / 1000)),
             "note": self.note,
+            "taskId": self.task_id,
         })
     }
 }
@@ -190,11 +201,26 @@ fn course_info(conn: &Connection, course_id: &str) -> rusqlite::Result<Option<(S
     .optional()
 }
 
-pub fn save_session(conn: &mut Connection, course_id: &str, duration: i64, note: Option<&str>) -> rusqlite::Result<()> {
+// Whether a task exists and belongs to this subject.
+fn task_of_course(conn: &Connection, task_id: &str, course_id: &str) -> bool {
+    conn.query_row("SELECT 1 FROM tasks WHERE id = ? AND course_id = ?", [task_id, course_id], |_| Ok(()))
+        .optional()
+        .ok()
+        .flatten()
+        .is_some()
+}
+
+pub fn save_session(
+    conn: &mut Connection,
+    course_id: &str,
+    duration: i64,
+    note: Option<&str>,
+    task_id: Option<&str>,
+) -> rusqlite::Result<()> {
     let tx = conn.transaction()?;
     tx.execute(
-        "INSERT INTO study_sessions (course_id, duration, note) VALUES (?, ?, ?)",
-        params![course_id, duration, note],
+        "INSERT INTO study_sessions (course_id, duration, note, task_id) VALUES (?, ?, ?, ?)",
+        params![course_id, duration, note, task_id],
     )?;
     tx.execute("UPDATE courses SET total_seconds = total_seconds + ? WHERE id = ?", params![duration, course_id])?;
     tx.commit()
@@ -217,15 +243,20 @@ pub fn start(state: &mut TimerState, conn: &Connection, course_id: &str, mode: M
     if archived {
         return Err("That subject is archived. Restore it to time it again.".into());
     }
+    // A task picked for another subject doesn't carry over.
+    if state.task_id.as_deref().is_some_and(|t| !task_of_course(conn, t, course_id)) {
+        state.task_id = None;
+    }
     // Record the session right away so a crash or power cut can't lose it.
     conn.execute(
-        "INSERT INTO active_session (id, course_id, start_timestamp, mode, last_heartbeat, note) VALUES (1, ?, ?, ?, ?, ?)
+        "INSERT INTO active_session (id, course_id, start_timestamp, mode, last_heartbeat, note, task_id) VALUES (1, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET course_id = excluded.course_id,
                                        start_timestamp = excluded.start_timestamp,
                                        mode = excluded.mode,
                                        last_heartbeat = excluded.last_heartbeat,
-                                       note = excluded.note",
-        params![course_id, now, mode.as_str(), now, state.note],
+                                       note = excluded.note,
+                                       task_id = excluded.task_id",
+        params![course_id, now, mode.as_str(), now, state.note, state.task_id],
     )
     .map_err(db::err)?;
 
@@ -242,10 +273,53 @@ pub fn start(state: &mut TimerState, conn: &Connection, course_id: &str, mode: M
     state.long_break = false;
     state.last_heartbeat_ms = now;
     state.away = None;
+    state.paused_at = None;
     Ok(())
 }
 
-fn session_event(kind: &str, state: &TimerState, saved: bool, duration: i64) -> Value {
+// Pauses the running focus session or break. While paused the clock stands
+// still, nothing is logged, and idle detection is off. For crash recovery the
+// heartbeat is set to the moment of pausing, so a crash while paused credits
+// only the time before it.
+pub fn pause(state: &mut TimerState, conn: &Connection, now: i64) -> Result<(), String> {
+    if state.phase == Phase::Idle {
+        return Err("The timer isn't running".into());
+    }
+    if state.paused_at.is_some() {
+        return Ok(());
+    }
+    state.paused_at = Some(now);
+    // An idle stretch still in progress ends here; one already answered for stays.
+    if matches!(state.away, Some(Away { back_ms: None, .. })) {
+        state.away = None;
+    }
+    if state.phase == Phase::Focus {
+        state.last_heartbeat_ms = now;
+        conn.execute("UPDATE active_session SET last_heartbeat = ? WHERE id = 1", [now]).map_err(db::err)?;
+    }
+    Ok(())
+}
+
+// Picks up where `pause` left off.
+pub fn resume(state: &mut TimerState, conn: &Connection, now: i64) -> Result<(), String> {
+    let Some(paused_at) = state.paused_at else { return Ok(()) };
+    state.start_ms += (now - paused_at).max(0);
+    state.paused_at = None;
+    if state.phase == Phase::Focus {
+        state.last_heartbeat_ms = now;
+        conn.execute(
+            "UPDATE active_session SET start_timestamp = ?, last_heartbeat = ? WHERE id = 1",
+            [state.start_ms, now],
+        )
+        .map_err(db::err)?;
+    }
+    Ok(())
+}
+
+fn session_event(kind: &str, state: &TimerState, conn: &Connection, saved: bool, duration: i64) -> Value {
+    let task_text: Option<String> = state.task_id.as_ref().and_then(|t| {
+        conn.query_row("SELECT text FROM tasks WHERE id = ?", [t], |r| r.get(0)).optional().ok().flatten()
+    });
     json!({
         "kind": kind,
         "saved": saved,
@@ -253,6 +327,7 @@ fn session_event(kind: &str, state: &TimerState, saved: bool, duration: i64) -> 
         "courseId": state.course_id,
         "courseCode": state.course_code,
         "courseTitle": state.course_title,
+        "taskText": task_text,
     })
 }
 
@@ -274,15 +349,19 @@ pub fn stop(state: &mut TimerState, conn: &mut Connection, now: i64) -> Result<V
             let saved = duration > MIN_SESSION_SECS;
             if saved {
                 let course_id = state.course_id.clone().unwrap_or_default();
-                save_session(conn, &course_id, duration, state.note.as_deref()).map_err(db::err)?;
+                save_session(conn, &course_id, duration, state.note.as_deref(), state.task_id.as_deref())
+                    .map_err(db::err)?;
             }
+            let event = session_event("stopped", state, conn, saved, duration);
             state.phase = Phase::Idle;
             state.away = None;
             state.note = None;
-            session_event("stopped", state, saved, duration)
+            state.task_id = None;
+            event
         }
     };
     state.target_secs = 0;
+    state.paused_at = None;
     Ok(event)
 }
 
@@ -295,6 +374,8 @@ pub fn cancel(state: &mut TimerState, conn: &Connection) {
     state.target_secs = 0;
     state.away = None;
     state.note = None;
+    state.task_id = None;
+    state.paused_at = None;
 }
 
 // Sets what the session is spent on, and records it for crash recovery.
@@ -307,10 +388,33 @@ pub fn set_note(state: &mut TimerState, conn: &Connection, note: Option<String>)
     state.note = note;
 }
 
+// Sets the task the session is spent on (None to clear it). `course_id` is the
+// subject it's picked for: the running one, or the one about to be started.
+pub fn set_task(state: &mut TimerState, conn: &Connection, task_id: Option<String>, course_id: &str) -> Result<(), String> {
+    if state.phase == Phase::Focus && state.course_id.as_deref() != Some(course_id) {
+        return Err("The timer is running on another subject".into());
+    }
+    if let Some(t) = &task_id {
+        if !task_of_course(conn, t, course_id) {
+            return Err("That task no longer exists".into());
+        }
+    }
+    if state.phase == Phase::Focus {
+        if let Err(e) = conn.execute("UPDATE active_session SET task_id = ? WHERE id = 1", [&task_id]) {
+            eprintln!("Failed to record the task: {e}");
+        }
+    }
+    state.task_id = task_id;
+    Ok(())
+}
+
 // Advances the timer to `now`. `idle_ms` is how long since the last keyboard or
 // mouse input, when known. Returns events for the page and notifications.
 pub fn tick(state: &mut TimerState, conn: &mut Connection, now: i64, idle_ms: Option<u64>) -> Vec<Value> {
     let mut events = Vec::new();
+    if state.paused_at.is_some() {
+        return events;
+    }
     match state.phase {
         Phase::Idle => {}
         Phase::Focus => {
@@ -325,14 +429,15 @@ pub fn tick(state: &mut TimerState, conn: &mut Connection, now: i64, idle_ms: Op
                 let duration = state.target_secs;
                 clear_active(conn);
                 let course_id = state.course_id.clone().unwrap_or_default();
-                let saved = save_session(conn, &course_id, duration, state.note.as_deref()).is_ok();
+                let saved =
+                    save_session(conn, &course_id, duration, state.note.as_deref(), state.task_id.as_deref()).is_ok();
                 state.pomodoros_done += 1;
                 let every = setting_i64(conn, LONG_BREAK_EVERY.0, LONG_BREAK_EVERY.1, 1, 12);
                 let long = state.pomodoros_done % every == 0;
                 let (key, default) = if long { LONG_BREAK_MIN } else { SHORT_BREAK_MIN };
                 let break_secs = setting_i64(conn, key, default, 0, 120) * 60;
 
-                let mut ev = session_event("pomodoro-complete", state, saved, duration);
+                let mut ev = session_event("pomodoro-complete", state, conn, saved, duration);
                 ev["breakSecs"] = json!(break_secs);
                 ev["longBreak"] = json!(long);
 
@@ -423,16 +528,17 @@ pub fn resolve_idle(state: &mut TimerState, conn: &Connection, keep: bool) -> Re
 // Called once at launch: a session left open by a crash is closed at its last
 // heartbeat, so time with the app closed isn't credited, and written to history.
 pub fn recover(conn: &mut Connection, now: i64) -> rusqlite::Result<Value> {
-    let row: Option<(Option<String>, Option<i64>, Option<String>, Option<i64>, Option<String>)> = conn
+    type Row = (Option<String>, Option<i64>, Option<String>, Option<i64>, Option<String>, Option<String>);
+    let row: Option<Row> = conn
         .query_row(
-            "SELECT course_id, start_timestamp, mode, last_heartbeat, note FROM active_session WHERE id = 1",
+            "SELECT course_id, start_timestamp, mode, last_heartbeat, note, task_id FROM active_session WHERE id = 1",
             [],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
         )
         .optional()?;
 
-    let (course_id, start, mode, heartbeat, note) = match row {
-        Some((Some(c), Some(s), m, h, n)) if s != 0 => (c, s, m, h, n),
+    let (course_id, start, mode, heartbeat, note, task_id) = match row {
+        Some((Some(c), Some(s), m, h, n, t)) if s != 0 => (c, s, m, h, n, t),
         _ => return Ok(json!({ "recovered": false })),
     };
 
@@ -460,8 +566,8 @@ pub fn recover(conn: &mut Connection, now: i64) -> rusqlite::Result<Value> {
     let tx = conn.transaction()?;
     // Logged at the time it ended, not at the time inmo was next opened.
     tx.execute(
-        "INSERT INTO study_sessions (course_id, duration, note, created_at) VALUES (?, ?, ?, datetime(?, 'unixepoch'))",
-        params![course_id, duration, note, start / 1000 + duration],
+        "INSERT INTO study_sessions (course_id, duration, note, task_id, created_at) VALUES (?, ?, ?, ?, datetime(?, 'unixepoch'))",
+        params![course_id, duration, note, task_id, start / 1000 + duration],
     )?;
     tx.execute("UPDATE courses SET total_seconds = total_seconds + ? WHERE id = ?", params![duration, course_id])?;
     tx.execute("DELETE FROM active_session WHERE id = 1", [])?;
@@ -731,6 +837,74 @@ mod tests {
     }
 
     #[test]
+    fn paused_time_is_not_counted() {
+        let mut conn = conn_with_course();
+        let mut s = TimerState::default();
+        start(&mut s, &conn, "c1", Mode::Stopwatch, T0).unwrap();
+        pause(&mut s, &conn, T0 + 60_000).unwrap();
+        // The clock stands still while paused, and ticking does nothing.
+        assert!(tick(&mut s, &mut conn, T0 + 600_000, Some(600_000)).is_empty());
+        assert_eq!(s.elapsed_secs(T0 + 600_000), 60);
+        assert!(s.away.is_none());
+        resume(&mut s, &conn, T0 + 600_000).unwrap();
+        let ev = stop(&mut s, &mut conn, T0 + 660_000).unwrap();
+        assert_eq!(ev["duration"], 120);
+        assert_eq!(total(&conn), 120);
+        assert!(s.paused_at.is_none());
+    }
+
+    #[test]
+    fn stopping_while_paused_logs_the_time_before_the_pause() {
+        let mut conn = conn_with_course();
+        let mut s = TimerState::default();
+        start(&mut s, &conn, "c1", Mode::Stopwatch, T0).unwrap();
+        pause(&mut s, &conn, T0 + 90_000).unwrap();
+        let ev = stop(&mut s, &mut conn, T0 + 3_600_000).unwrap();
+        assert_eq!(ev["duration"], 90);
+    }
+
+    #[test]
+    fn a_paused_pomodoro_does_not_finish() {
+        let mut conn = conn_with_course();
+        let mut s = TimerState::default();
+        start(&mut s, &conn, "c1", Mode::Pomodoro, T0).unwrap();
+        pause(&mut s, &conn, T0 + 60_000).unwrap();
+        assert!(tick(&mut s, &mut conn, T0 + 3_600_000, None).is_empty());
+        assert_eq!(s.phase, Phase::Focus);
+        resume(&mut s, &conn, T0 + 3_600_000).unwrap();
+        assert_eq!(s.shown_secs(T0 + 3_600_000), 24 * 60);
+    }
+
+    #[test]
+    fn a_crash_while_paused_recovers_only_the_time_before_the_pause() {
+        let mut conn = conn_with_course();
+        let mut s = TimerState::default();
+        start(&mut s, &conn, "c1", Mode::Stopwatch, T0).unwrap();
+        pause(&mut s, &conn, T0 + 100_000).unwrap();
+        let rec = recover(&mut conn, T0 + 3_600_000).unwrap();
+        assert_eq!(rec["duration"], 100);
+    }
+
+    #[test]
+    fn a_crash_after_resuming_skips_the_paused_stretch() {
+        let mut conn = conn_with_course();
+        let mut s = TimerState::default();
+        start(&mut s, &conn, "c1", Mode::Stopwatch, T0).unwrap();
+        pause(&mut s, &conn, T0 + 100_000).unwrap();
+        resume(&mut s, &conn, T0 + 1_000_000).unwrap();
+        tick(&mut s, &mut conn, T0 + 1_050_000, None); // heartbeat
+        let rec = recover(&mut conn, T0 + 2_000_000).unwrap();
+        assert_eq!(rec["duration"], 150);
+    }
+
+    #[test]
+    fn pausing_needs_a_running_timer() {
+        let conn = conn_with_course();
+        let mut s = TimerState::default();
+        assert!(pause(&mut s, &conn, T0).is_err());
+    }
+
+    #[test]
     fn short_sessions_are_not_logged() {
         let mut conn = conn_with_course();
         let mut s = TimerState::default();
@@ -821,6 +995,39 @@ mod tests {
         stop(&mut s, &mut conn, T0 + 290_000).unwrap();
         assert_eq!(last_note(&conn).as_deref(), Some("Exercises"));
         assert_eq!(s.note, None);
+    }
+
+    fn last_task(conn: &Connection) -> Option<String> {
+        conn.query_row("SELECT task_id FROM study_sessions ORDER BY id DESC LIMIT 1", [], |r| r.get(0)).unwrap()
+    }
+
+    #[test]
+    fn sessions_remember_their_task() {
+        let mut conn = conn_with_course();
+        conn.execute_batch(
+            "INSERT INTO courses (id, title, code) VALUES ('c2', 'Biology', 'BI1');
+             INSERT INTO tasks (id, course_id, text) VALUES ('t1', 'c1', 'Problem set 3');
+             INSERT INTO tasks (id, course_id, text) VALUES ('t2', 'c2', 'Lab report');",
+        )
+        .unwrap();
+        let mut s = TimerState::default();
+        assert!(set_task(&mut s, &conn, Some("t2".into()), "c1").is_err(), "another subject's task");
+        set_task(&mut s, &conn, Some("t1".into()), "c1").unwrap();
+        start(&mut s, &conn, "c1", Mode::Stopwatch, T0).unwrap();
+        stop(&mut s, &mut conn, T0 + 120_000).unwrap();
+        assert_eq!(last_task(&conn).as_deref(), Some("t1"));
+        assert_eq!(s.task_id, None, "a manual stop clears it");
+
+        // Picked while idle, then the timer starts on a different subject: dropped.
+        set_task(&mut s, &conn, Some("t1".into()), "c1").unwrap();
+        start(&mut s, &conn, "c2", Mode::Stopwatch, T0 + 200_000).unwrap();
+        assert_eq!(s.task_id, None);
+        assert!(set_task(&mut s, &conn, Some("t1".into()), "c1").is_err(), "running on c2");
+        set_task(&mut s, &conn, Some("t2".into()), "c2").unwrap();
+        // Crash: recovery keeps the task.
+        tick(&mut s, &mut conn, T0 + 260_000, None);
+        recover(&mut conn, T0 + 900_000).unwrap();
+        assert_eq!(last_task(&conn).as_deref(), Some("t2"));
     }
 
     #[test]
