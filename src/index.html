@@ -91,9 +91,14 @@
           <button class="icon-btn" onclick="clearWorkingOn()" title="Stop working on this task" aria-label="Stop working on this task"><span data-icon="x" data-size="13"></span></button>
         </div>
 
-        <button class="play-btn" id="timer-btn" title="Start" onclick="toggleTimer()">
-          <svg id="play-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-        </button>
+        <div class="timer-controls">
+          <button class="pause-btn is-hidden" id="pause-btn" title="Pause" aria-label="Pause" onclick="togglePause()">
+            <svg id="pause-icon" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+          </button>
+          <button class="play-btn" id="timer-btn" title="Start" onclick="toggleTimer()">
+            <svg id="play-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          </button>
+        </div>
       </div>
 
       <div class="section-box is-hidden" id="exams-box">

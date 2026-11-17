@@ -50,6 +50,8 @@
     timerGet: () => invoke('timer_get'),
     timerStart: (courseId, mode) => invoke('timer_start', { courseId, mode }),
     timerStop: () => invoke('timer_stop'),
+    timerPause: () => invoke('timer_pause'),
+    timerResume: () => invoke('timer_resume'),
     timerResolveIdle: (keep) => invoke('timer_resolve_idle', { keep }),
     timerSetNote: (note) => invoke('timer_set_note', { note }),
     timerSetTask: (taskId, courseId) => invoke('timer_set_task', { taskId, courseId }),

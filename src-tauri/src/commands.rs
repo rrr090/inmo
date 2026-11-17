@@ -605,6 +605,22 @@ pub fn timer_start(app: AppHandle, course_id: String, mode: String) -> CmdResult
     })
 }
 
+#[tauri::command(async)]
+pub fn timer_pause(app: AppHandle) -> CmdResult<Value> {
+    timer::with_timer(&app, |state, conn, now| {
+        timer::pause(state, conn, now)?;
+        Ok((json!({ "success": true }), vec![]))
+    })
+}
+
+#[tauri::command(async)]
+pub fn timer_resume(app: AppHandle) -> CmdResult<Value> {
+    timer::with_timer(&app, |state, conn, now| {
+        timer::resume(state, conn, now)?;
+        Ok((json!({ "success": true }), vec![]))
+    })
+}
+
 // Every stop, from here, the tray, the shortcut or the widget, is reported as a
 // "stopped" timer-event, which is where the page refreshes and shows its toast.
 #[tauri::command(async)]

@@ -7,7 +7,8 @@ import { escapeHtml, formatClock, formatDuration, formatCompact, localDateKey, e
 import { renderWorkingOn } from './tasks.js';
 
 const PLAY_ICON = '<path d="M8 5v14l11-7z"/>';
-const STOP_ICON = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+const STOP_ICON = '<path d="M6 6h12v12H6z"/>';
+const PAUSE_ICON = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
 
 export async function initTimer() {
   window.api.onTimerState(applySnapshot);
@@ -41,6 +42,18 @@ function applySnapshot(snap) {
     btn.title = onBreak ? 'Skip break' : running ? 'Stop and save' : 'Start';
   }
   document.querySelector('.timer-section')?.classList.toggle('on-break', onBreak);
+
+  const paused = running && !!snap.paused;
+  const pauseBtn = document.getElementById('pause-btn');
+  const pauseIcon = document.getElementById('pause-icon');
+  if (pauseBtn && pauseIcon) {
+    pauseBtn.classList.toggle('is-hidden', !running);
+    pauseBtn.classList.toggle('paused', paused);
+    pauseIcon.innerHTML = paused ? PLAY_ICON : PAUSE_ICON;
+    pauseBtn.title = paused ? 'Resume' : 'Pause';
+    pauseBtn.setAttribute('aria-label', pauseBtn.title);
+  }
+  document.querySelector('.timer-section')?.classList.toggle('paused', paused);
 
   renderTimerRing();
 
@@ -103,6 +116,7 @@ export function renderTimerRing() {
       statusText = `${snap.pomodorosDone} of ${snap.longBreakEvery} Pomodoros done · start the next one when you're ready`;
     }
   }
+  if (running && snap.paused) statusText = 'Paused · the clock resumes where it left off';
   const pct = Math.min(100, Math.max(0, frac * 100));
   fill.style.strokeDasharray = `${pct} 100`;
   fill.style.opacity = pct > 0 ? '1' : '0'; // a round cap would draw a dot at 0
@@ -178,6 +192,16 @@ export async function toggleTimer() {
   }
 }
 
+export async function togglePause() {
+  if (!state.timer.isStudying) return;
+  try {
+    if (state.timer.paused) await window.api.timerResume();
+    else await window.api.timerPause();
+  } catch (err) {
+    showToast('Timer error', { message: errorText(err), type: 'error' });
+  }
+}
+
 // Switching subject ends the current session, the way it always has.
 export async function stopIfRunning() {
   if (state.timer.phase === 'focus') await window.api.timerStop().catch(err => console.error(err));
@@ -216,7 +240,7 @@ export function updateInPageWidget() {
   }
   const label = state.timer.phase === 'break' ? state.timer.courseLabel : (state.timer.courseLabel || '').split(' — ')[0];
   widget.innerHTML = `
-    <span class="mini-timer-dot"></span>
+    <span class="mini-timer-dot"${state.timer.paused ? ' style="animation:none;opacity:.4"' : ''}></span>
     <span class="mini-timer-time">${escapeHtml(state.timer.timeStr)}</span>
     <span class="mini-timer-course">${escapeHtml(label)}</span>
   `;

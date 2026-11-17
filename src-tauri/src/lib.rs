@@ -261,6 +261,8 @@ pub fn run() {
             commands::timer_get,
             commands::timer_start,
             commands::timer_stop,
+            commands::timer_pause,
+            commands::timer_resume,
             commands::timer_resolve_idle,
             commands::take_recovery_result,
             data_io::export_sessions_csv,

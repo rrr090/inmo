@@ -197,6 +197,19 @@
     .play-btn:hover { transform: scale(1.06); background-color: var(--accent-hover); }
     .play-btn svg { width: 24px; height: 24px; fill: #000; }
     .play-btn.running { background-color: var(--danger); box-shadow: 0 0 25px var(--danger-glow); }
+    .timer-controls { display: flex; align-items: center; justify-content: center; gap: 16px; }
+    .pause-btn {
+      width: 48px; height: 48px; border-radius: 50%;
+      background: var(--bg-surface); border: 1px solid var(--border-color); cursor: pointer;
+      display: flex; align-items: center; justify-content: center; transition: all 0.2s ease;
+    }
+    .pause-btn:hover { transform: scale(1.06); border-color: var(--accent); }
+    .pause-btn svg { width: 20px; height: 20px; fill: var(--text-main); }
+    .pause-btn.paused { background: var(--accent); border-color: var(--accent); }
+    .pause-btn.paused svg { fill: #000; }
+    .timer-section.paused #timer-display { opacity: 0.5; animation: paused-blink 1.6s ease-in-out infinite; }
+    @keyframes paused-blink { 50% { opacity: 0.25; } }
+    @media (prefers-reduced-motion: reduce) { .timer-section.paused #timer-display { animation: none; } }
 
     /* Section Boxes & Tasks */
     .section-box {

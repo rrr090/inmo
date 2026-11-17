@@ -66,7 +66,8 @@ pub fn update(app: &AppHandle, snap: &Value) {
     }
     .to_string();
     let tooltip = if studying {
-        format!("inmo · {} · {}", snap["timeStr"].as_str().unwrap_or(""), snap["courseLabel"].as_str().unwrap_or(""))
+        let paused = if snap["paused"] == Value::Bool(true) { " (paused)" } else { "" };
+        format!("inmo · {}{paused} · {}", snap["timeStr"].as_str().unwrap_or(""), snap["courseLabel"].as_str().unwrap_or(""))
     } else {
         "inmo".to_string()
     };

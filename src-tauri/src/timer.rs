@@ -99,6 +99,9 @@ pub struct TimerState {
     // The to-do item the session is spent on, if one was picked. Same lifetime
     // as the note, and always a task of the session's subject.
     pub task_id: Option<String>,
+    // When the running focus session or break was paused; None while it runs.
+    // Resuming moves `start_ms` forward by the paused stretch, so it isn't counted.
+    pub paused_at: Option<i64>,
 }
 
 impl Default for TimerState {
@@ -117,6 +120,7 @@ impl Default for TimerState {
             away: None,
             note: None,
             task_id: None,
+            paused_at: None,
         }
     }
 }
@@ -135,7 +139,8 @@ pub fn format_clock(secs: i64, with_hours: bool) -> String {
 
 impl TimerState {
     pub fn elapsed_secs(&self, now: i64) -> i64 {
-        ((now - self.start_ms) / 1000).max(0)
+        let until = self.paused_at.unwrap_or(now);
+        ((until - self.start_ms) / 1000).max(0)
     }
 
     // What the clock shows: time so far for the stopwatch, time left for a countdown.
@@ -171,6 +176,7 @@ impl TimerState {
             "phase": match self.phase { Phase::Idle => "idle", Phase::Focus => "focus", Phase::Break => "break" },
             "mode": self.mode.as_str(),
             "isStudying": self.phase != Phase::Idle,
+            "paused": self.paused_at.is_some(),
             "courseId": self.course_id,
             "courseLabel": self.course_label(),
             "shownSecs": shown,
@@ -267,6 +273,46 @@ pub fn start(state: &mut TimerState, conn: &Connection, course_id: &str, mode: M
     state.long_break = false;
     state.last_heartbeat_ms = now;
     state.away = None;
+    state.paused_at = None;
+    Ok(())
+}
+
+// Pauses the running focus session or break. While paused the clock stands
+// still, nothing is logged, and idle detection is off. For crash recovery the
+// heartbeat is set to the moment of pausing, so a crash while paused credits
+// only the time before it.
+pub fn pause(state: &mut TimerState, conn: &Connection, now: i64) -> Result<(), String> {
+    if state.phase == Phase::Idle {
+        return Err("The timer isn't running".into());
+    }
+    if state.paused_at.is_some() {
+        return Ok(());
+    }
+    state.paused_at = Some(now);
+    // An idle stretch still in progress ends here; one already answered for stays.
+    if matches!(state.away, Some(Away { back_ms: None, .. })) {
+        state.away = None;
+    }
+    if state.phase == Phase::Focus {
+        state.last_heartbeat_ms = now;
+        conn.execute("UPDATE active_session SET last_heartbeat = ? WHERE id = 1", [now]).map_err(db::err)?;
+    }
+    Ok(())
+}
+
+// Picks up where `pause` left off.
+pub fn resume(state: &mut TimerState, conn: &Connection, now: i64) -> Result<(), String> {
+    let Some(paused_at) = state.paused_at else { return Ok(()) };
+    state.start_ms += (now - paused_at).max(0);
+    state.paused_at = None;
+    if state.phase == Phase::Focus {
+        state.last_heartbeat_ms = now;
+        conn.execute(
+            "UPDATE active_session SET start_timestamp = ?, last_heartbeat = ? WHERE id = 1",
+            [state.start_ms, now],
+        )
+        .map_err(db::err)?;
+    }
     Ok(())
 }
 
@@ -315,6 +361,7 @@ pub fn stop(state: &mut TimerState, conn: &mut Connection, now: i64) -> Result<V
         }
     };
     state.target_secs = 0;
+    state.paused_at = None;
     Ok(event)
 }
 
@@ -328,6 +375,7 @@ pub fn cancel(state: &mut TimerState, conn: &Connection) {
     state.away = None;
     state.note = None;
     state.task_id = None;
+    state.paused_at = None;
 }
 
 // Sets what the session is spent on, and records it for crash recovery.
@@ -364,6 +412,9 @@ pub fn set_task(state: &mut TimerState, conn: &Connection, task_id: Option<Strin
 // mouse input, when known. Returns events for the page and notifications.
 pub fn tick(state: &mut TimerState, conn: &mut Connection, now: i64, idle_ms: Option<u64>) -> Vec<Value> {
     let mut events = Vec::new();
+    if state.paused_at.is_some() {
+        return events;
+    }
     match state.phase {
         Phase::Idle => {}
         Phase::Focus => {
@@ -783,6 +834,74 @@ mod tests {
         assert_eq!(total(&conn), 125);
         assert_eq!(active_rows(&conn), 0);
         assert_eq!(s.phase, Phase::Idle);
+    }
+
+    #[test]
+    fn paused_time_is_not_counted() {
+        let mut conn = conn_with_course();
+        let mut s = TimerState::default();
+        start(&mut s, &conn, "c1", Mode::Stopwatch, T0).unwrap();
+        pause(&mut s, &conn, T0 + 60_000).unwrap();
+        // The clock stands still while paused, and ticking does nothing.
+        assert!(tick(&mut s, &mut conn, T0 + 600_000, Some(600_000)).is_empty());
+        assert_eq!(s.elapsed_secs(T0 + 600_000), 60);
+        assert!(s.away.is_none());
+        resume(&mut s, &conn, T0 + 600_000).unwrap();
+        let ev = stop(&mut s, &mut conn, T0 + 660_000).unwrap();
+        assert_eq!(ev["duration"], 120);
+        assert_eq!(total(&conn), 120);
+        assert!(s.paused_at.is_none());
+    }
+
+    #[test]
+    fn stopping_while_paused_logs_the_time_before_the_pause() {
+        let mut conn = conn_with_course();
+        let mut s = TimerState::default();
+        start(&mut s, &conn, "c1", Mode::Stopwatch, T0).unwrap();
+        pause(&mut s, &conn, T0 + 90_000).unwrap();
+        let ev = stop(&mut s, &mut conn, T0 + 3_600_000).unwrap();
+        assert_eq!(ev["duration"], 90);
+    }
+
+    #[test]
+    fn a_paused_pomodoro_does_not_finish() {
+        let mut conn = conn_with_course();
+        let mut s = TimerState::default();
+        start(&mut s, &conn, "c1", Mode::Pomodoro, T0).unwrap();
+        pause(&mut s, &conn, T0 + 60_000).unwrap();
+        assert!(tick(&mut s, &mut conn, T0 + 3_600_000, None).is_empty());
+        assert_eq!(s.phase, Phase::Focus);
+        resume(&mut s, &conn, T0 + 3_600_000).unwrap();
+        assert_eq!(s.shown_secs(T0 + 3_600_000), 24 * 60);
+    }
+
+    #[test]
+    fn a_crash_while_paused_recovers_only_the_time_before_the_pause() {
+        let mut conn = conn_with_course();
+        let mut s = TimerState::default();
+        start(&mut s, &conn, "c1", Mode::Stopwatch, T0).unwrap();
+        pause(&mut s, &conn, T0 + 100_000).unwrap();
+        let rec = recover(&mut conn, T0 + 3_600_000).unwrap();
+        assert_eq!(rec["duration"], 100);
+    }
+
+    #[test]
+    fn a_crash_after_resuming_skips_the_paused_stretch() {
+        let mut conn = conn_with_course();
+        let mut s = TimerState::default();
+        start(&mut s, &conn, "c1", Mode::Stopwatch, T0).unwrap();
+        pause(&mut s, &conn, T0 + 100_000).unwrap();
+        resume(&mut s, &conn, T0 + 1_000_000).unwrap();
+        tick(&mut s, &mut conn, T0 + 1_050_000, None); // heartbeat
+        let rec = recover(&mut conn, T0 + 2_000_000).unwrap();
+        assert_eq!(rec["duration"], 150);
+    }
+
+    #[test]
+    fn pausing_needs_a_running_timer() {
+        let conn = conn_with_course();
+        let mut s = TimerState::default();
+        assert!(pause(&mut s, &conn, T0).is_err());
     }
 
     #[test]

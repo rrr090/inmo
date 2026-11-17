@@ -2,7 +2,7 @@
 // Ctrl+Alt+S lives in the backend (tray.rs).
 import { state, getActiveCourse } from './state.js';
 import { escapeHtml } from './format.js';
-import { toggleTimer, setMode } from './timer.js';
+import { toggleTimer, togglePause, setMode } from './timer.js';
 import { libraryOrder, selectCourse, openSubjectDialog } from './subjects.js';
 import { openWeeklyReview } from './review.js';
 
@@ -11,6 +11,7 @@ const PAGES = ['timer-page', 'analytics-page', 'history-page', 'settings-page'];
 export const SHORTCUTS = [
   ['Timer', [
     [['Space'], 'Start or stop the timer'],
+    [['P'], 'Pause or resume the timer'],
     [['M'], 'Switch between Stopwatch and Pomodoro'],
     [['N'], 'Type what you\'re working on'],
     [['Ctrl', 'Alt', 'S'], 'Start or stop from any app (turn it on in Settings)'],
@@ -104,6 +105,7 @@ function onKeydown(e) {
       window.switchPage('history-page');
       document.getElementById('history-search')?.focus();
     },
+    p: () => togglePause(),
     m: () => setMode(state.timerMode === 'pomodoro' ? 'stopwatch' : 'pomodoro'),
     n: () => focusOnTimerPage('session-note'),
     t: () => focusOnTimerPage('new-task-text'),

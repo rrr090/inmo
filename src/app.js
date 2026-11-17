@@ -4,7 +4,7 @@ import { renderIcons } from './icons.js';
 import { showToast } from './notify.js';
 import { state, onDataChanged, reloadData, getActiveCourse } from './state.js';
 import { formatDuration } from './format.js';
-import { initTimer, toggleTimer, setMode, renderModeTabs, updateInPageWidget, handleNoteInput, saveNote, renderTimerRing } from './timer.js';
+import { initTimer, toggleTimer, togglePause, setMode, renderModeTabs, updateInPageWidget, handleNoteInput, saveNote, renderTimerRing } from './timer.js';
 import * as exams from './exams.js';
 import * as subjects from './subjects.js';
 import * as tasks from './tasks.js';
@@ -81,6 +81,7 @@ Object.assign(window, {
   switchPage,
   switchToTimerPage: () => switchPage('timer-page'),
   toggleTimer,
+  togglePause,
   setMode,
   handleNoteInput,
   saveNote,
