@@ -50,7 +50,10 @@
     ],
     "windows": {
       "nsis": {
-        "installMode": "currentUser"
+        "installMode": "currentUser",
+        "installerIcon": "../assets/icon.ico",
+        "sidebarImage": "../assets/installer/sidebar.bmp",
+        "headerImage": "../assets/installer/header.bmp"
       }
     },
     "createUpdaterArtifacts": true
