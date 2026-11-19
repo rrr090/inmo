@@ -135,7 +135,8 @@ pub fn import_csv_text(conn: &mut Connection, text: &str) -> Result<Value, Strin
             .optional()
             .map_err(err)?
             .flatten();
-        let (Some(ended_utc), false, true) = (ended_utc, code.is_empty(), (1..=crate::commands::MAX_SESSION_SECS).contains(&duration))
+        let (Some(ended_utc), false, true) =
+            (ended_utc, code.is_empty(), (1..=crate::commands::MAX_SESSION_SECS).contains(&duration))
         else {
             invalid += 1;
             continue;
@@ -152,11 +153,7 @@ pub fn import_csv_text(conn: &mut Connection, text: &str) -> Result<Value, Strin
             .optional()
             .map_err(err)?
             .or(tx
-                .query_row(
-                    "SELECT MIN(id) FROM courses WHERE code = ?1 HAVING COUNT(*) = 1",
-                    [&code],
-                    |r| r.get(0),
-                )
+                .query_row("SELECT MIN(id) FROM courses WHERE code = ?1 HAVING COUNT(*) = 1", [&code], |r| r.get(0))
                 .optional()
                 .map_err(err)?);
         let course_id = match existing {
@@ -209,10 +206,8 @@ fn before_change_snapshot(conn: &Connection, what: &str) -> Result<PathBuf, Stri
 
 #[tauri::command(async)]
 pub fn import_sessions_csv(app: AppHandle, db: State<'_, Db>) -> CmdResult<Value> {
-    let Some(file) = main_window_dialog(&app)
-        .set_title("Import sessions")
-        .add_filter("CSV", &["csv"])
-        .blocking_pick_file()
+    let Some(file) =
+        main_window_dialog(&app).set_title("Import sessions").add_filter("CSV", &["csv"]).blocking_pick_file()
     else {
         return Ok(json!({ "canceled": true }));
     };
@@ -288,8 +283,9 @@ pub fn check_backup_file(path: &Path) -> Result<(), String> {
 
 pub fn restore_from(conn: &mut Connection, path: &Path) -> Result<(), String> {
     check_backup_file(path)?;
-    conn.restore(rusqlite::MAIN_DB, path, None::<fn(rusqlite::backup::Progress)>)
-        .map_err(err)?;
+    conn.restore(rusqlite::MAIN_DB, path, None::<fn(rusqlite::backup::Progress)>).map_err(err)?;
+    // The backup's pages may carry a different journal mode; put ours back.
+    db::tune(conn);
     // A backup from an older version may lack newer columns.
     db::migrate(conn).map_err(err)
 }

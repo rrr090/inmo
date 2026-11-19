@@ -67,7 +67,11 @@ pub fn update(app: &AppHandle, snap: &Value) {
     .to_string();
     let tooltip = if studying {
         let paused = if snap["paused"] == Value::Bool(true) { " (paused)" } else { "" };
-        format!("inmo · {}{paused} · {}", snap["timeStr"].as_str().unwrap_or(""), snap["courseLabel"].as_str().unwrap_or(""))
+        format!(
+            "inmo · {}{paused} · {}",
+            snap["timeStr"].as_str().unwrap_or(""),
+            snap["courseLabel"].as_str().unwrap_or("")
+        )
     } else {
         "inmo".to_string()
     };
@@ -115,7 +119,8 @@ fn apply_shortcut(app: &AppHandle, enabled: bool) -> Result<(), String> {
 }
 
 pub fn setup_shortcut(app: &AppHandle) {
-    let enabled = app.try_state::<Db>().and_then(|db| db.0.lock().ok().map(|c| db::setting_bool(&c, SHORTCUT_SETTING, true)));
+    let enabled =
+        app.try_state::<Db>().and_then(|db| db.0.lock().ok().map(|c| db::setting_bool(&c, SHORTCUT_SETTING, true)));
     if let Err(e) = apply_shortcut(app, enabled.unwrap_or(true)) {
         eprintln!("{e}");
     }

@@ -10,8 +10,28 @@ const PLAY_ICON = '<path d="M8 5v14l11-7z"/>';
 const STOP_ICON = '<path d="M6 6h12v12H6z"/>';
 const PAUSE_ICON = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
 
+// While the window is minimized or in the tray nobody sees the clock, so the
+// once-a-second DOM updates wait; the newest snapshot is drawn when it's shown again.
+let deferredSnap = null;
+function drawDeferred() {
+  if (!deferredSnap || document.hidden) return;
+  const snap = deferredSnap;
+  deferredSnap = null;
+  applySnapshot(snap);
+}
+
 export async function initTimer() {
-  window.api.onTimerState(applySnapshot);
+  window.api.onTimerState((snap) => {
+    if (document.hidden && snap) {
+      state.timer = snap; // keep the data current; only the drawing waits
+      deferredSnap = snap;
+      return;
+    }
+    deferredSnap = null;
+    applySnapshot(snap);
+  });
+  document.addEventListener('visibilitychange', drawDeferred);
+  window.addEventListener('focus', drawDeferred);
   window.api.onTimerEvent(handleTimerEvent);
   const snap = await window.api.timerGet();
   applySnapshot(snap);

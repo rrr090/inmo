@@ -11,6 +11,20 @@ use serde_json::{json, Map, Value};
 
 pub struct Db(pub Mutex<Connection>);
 
+// A second, read-only connection to the same file for the heavy reads (history,
+// analytics). With WAL they run alongside writes, and they don't hold the Db
+// lock the timer thread needs every tick.
+pub struct ReadDb(pub Mutex<Connection>);
+
+pub fn open_read_db() -> rusqlite::Result<Connection> {
+    let conn = Connection::open_with_flags(
+        db_path(),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )?;
+    conn.busy_timeout(std::time::Duration::from_millis(5000))?;
+    Ok(conn)
+}
+
 pub type CmdResult<T> = Result<T, String>;
 
 pub fn err<E: std::fmt::Display>(e: E) -> String {
@@ -41,10 +55,23 @@ pub fn open_db() -> rusqlite::Result<Connection> {
         let _ = std::fs::create_dir_all(parent);
     }
     let conn = Connection::open(&path)?;
+    tune(&conn);
     backup_before_first_tauri_launch(&conn);
     migrate(&conn)?;
     weekly_backup(&conn);
     Ok(conn)
+}
+
+// WAL lets reads proceed while a write is in flight, and with synchronous=NORMAL
+// each commit (the 30-second heartbeat, every saved session) costs far fewer
+// fsyncs. A power cut can lose at most the last commit, never corrupt the file.
+// Failures here only mean slower, so they're logged and ignored.
+pub fn tune(conn: &Connection) {
+    for (name, value) in [("journal_mode", "WAL"), ("synchronous", "NORMAL"), ("busy_timeout", "5000")] {
+        if let Err(e) = conn.pragma_update(None, name, value) {
+            eprintln!("PRAGMA {name}={value} failed: {e}");
+        }
+    }
 }
 
 // Creates any missing tables and columns. Safe to run on every launch, and again
@@ -107,6 +134,15 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
             }
         }
     }
+    // History, analytics and the weekly review all filter sessions by time or
+    // subject, and tasks by subject or due date.
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_sessions_created ON study_sessions(created_at);
+         CREATE INDEX IF NOT EXISTS idx_sessions_course ON study_sessions(course_id, created_at);
+         CREATE INDEX IF NOT EXISTS idx_sessions_task ON study_sessions(task_id);
+         CREATE INDEX IF NOT EXISTS idx_tasks_course ON tasks(course_id, position);
+         CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(due_date);",
+    )?;
     Ok(())
 }
 
@@ -133,9 +169,7 @@ pub fn query_json(conn: &Connection, sql: &str, args: &[&dyn ToSql]) -> rusqlite
 // ---------- Settings ----------
 
 pub fn get_setting_value(conn: &Connection, key: &str) -> rusqlite::Result<Option<String>> {
-    conn.query_row("SELECT value FROM settings WHERE key = ?", [key], |r| r.get(0))
-        .optional()
-        .map(Option::flatten)
+    conn.query_row("SELECT value FROM settings WHERE key = ?", [key], |r| r.get(0)).optional().map(Option::flatten)
 }
 
 pub fn set_setting_value(conn: &Connection, key: &str, value: &str) -> rusqlite::Result<()> {
@@ -179,8 +213,7 @@ pub fn snapshot(conn: &Connection, dest: &Path) -> rusqlite::Result<()> {
 }
 
 fn has_tables(conn: &Connection) -> bool {
-    conn.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'", [], |r| r.get::<_, i64>(0))
-        .unwrap_or(0)
+    conn.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'", [], |r| r.get::<_, i64>(0)).unwrap_or(0)
         > 0
 }
 
@@ -215,7 +248,7 @@ fn weekly_backup(conn: &Connection) {
         .and_then(|p| p.metadata().ok())
         .and_then(|m| m.modified().ok())
         .and_then(|t| t.elapsed().ok());
-    let due = newest_age.map_or(true, |age| age.as_secs() >= AUTO_BACKUP_EVERY_DAYS * 24 * 3600);
+    let due = newest_age.is_none_or(|age| age.as_secs() >= AUTO_BACKUP_EVERY_DAYS * 24 * 3600);
     if !due || !has_tables(conn) {
         return;
     }
@@ -255,4 +288,37 @@ pub fn test_conn() -> Connection {
     let conn = Connection::open_in_memory().unwrap();
     migrate(&conn).unwrap();
     conn
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wal_file_db_has_indexes_and_read_connection_sees_writes() {
+        let dir = std::env::temp_dir().join(format!("inmo-wal-test-{}", now_ms()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("t.db");
+
+        let conn = Connection::open(&path).unwrap();
+        tune(&conn);
+        migrate(&conn).unwrap();
+        migrate(&conn).unwrap(); // idempotent, indexes included
+        let mode: String = conn.query_row("PRAGMA journal_mode", [], |r| r.get(0)).unwrap();
+        assert_eq!(mode, "wal");
+        let indexes: i64 = conn
+            .query_row("SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_%'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(indexes, 5);
+
+        let reader = Connection::open_with_flags(&path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+        conn.execute("INSERT INTO courses (id, title, code) VALUES ('c', 'Algebra', 'M1')", []).unwrap();
+        let n: i64 = reader.query_row("SELECT COUNT(*) FROM courses", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 1, "a committed write is visible to the read connection at once");
+
+        drop((conn, reader));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

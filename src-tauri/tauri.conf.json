@@ -6,7 +6,7 @@
   "build": {
     "frontendDist": "../tauri-ui-dist",
     "beforeDevCommand": "node build-ui.js",
-    "beforeBuildCommand": "node build-ui.js"
+    "beforeBuildCommand": "node build-ui.js --minify"
   },
   "app": {
     "withGlobalTauri": true,

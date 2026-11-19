@@ -7,7 +7,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager, State};
 
-use crate::db::{self, err, now_ms, query_json, CmdResult, Db};
+use crate::db::{self, err, now_ms, query_json, CmdResult, Db, ReadDb};
 use crate::timer::{self, Mode, Phase};
 use crate::trash::{Deleted, Trash};
 
@@ -96,7 +96,9 @@ pub fn update_course(
             params![title, code, term, color, course_id],
         )
         .map_err(err)?;
-    Ok(json!({ "success": true, "changes": changes, "id": course_id, "title": title, "code": code, "term": term, "color": color }))
+    Ok(
+        json!({ "success": true, "changes": changes, "id": course_id, "title": title, "code": code, "term": term, "color": color }),
+    )
 }
 
 // Deletes a subject with its tasks and sessions; returns them for Undo.
@@ -166,7 +168,12 @@ pub fn reset_course_time(db: State<'_, Db>, trash: State<'_, Trash>, course_id: 
 // An exam date (YYYY-MM-DD, or none) and how many hours to have studied by then
 // (0 for no target).
 #[tauri::command(async)]
-pub fn set_course_exam(db: State<'_, Db>, course_id: String, date: Option<String>, target_hours: f64) -> CmdResult<Value> {
+pub fn set_course_exam(
+    db: State<'_, Db>,
+    course_id: String,
+    date: Option<String>,
+    target_hours: f64,
+) -> CmdResult<Value> {
     let conn = db.0.lock().map_err(err)?;
     let date = clean_date(&conn, date.as_deref())?;
     if !target_hours.is_finite() || !(0.0..=2000.0).contains(&target_hours) {
@@ -195,8 +202,7 @@ pub fn clean_date(conn: &Connection, date: Option<&str>) -> Result<Option<String
 pub fn set_course_goal(db: State<'_, Db>, course_id: String, seconds: f64) -> CmdResult<Value> {
     let conn = db.0.lock().map_err(err)?;
     let value = if seconds.is_finite() { seconds.max(0.0).round() as i64 } else { 0 };
-    conn.execute("UPDATE courses SET weekly_goal_seconds = ? WHERE id = ?", params![value, course_id])
-        .map_err(err)?;
+    conn.execute("UPDATE courses SET weekly_goal_seconds = ? WHERE id = ?", params![value, course_id]).map_err(err)?;
     Ok(json!({ "success": true }))
 }
 
@@ -205,7 +211,7 @@ pub fn set_course_goal(db: State<'_, Db>, course_id: String, seconds: f64) -> Cm
 // Newest first, optionally only sessions whose note, subject title or code
 // contains `search`. ended_at is Unix seconds, for editing.
 #[tauri::command(async)]
-pub fn get_history(db: State<'_, Db>, limit: Option<i64>, search: Option<String>) -> CmdResult<Value> {
+pub fn get_history(db: State<'_, ReadDb>, limit: Option<i64>, search: Option<String>) -> CmdResult<Value> {
     let conn = db.0.lock().map_err(err)?;
     history_rows(&conn, limit.unwrap_or(50), search.as_deref().unwrap_or(""))
 }
@@ -389,7 +395,7 @@ pub fn delete_session(db: State<'_, Db>, trash: State<'_, Trash>, session_id: i6
 }
 
 #[tauri::command(async)]
-pub fn get_daily_stats(db: State<'_, Db>) -> CmdResult<Vec<Value>> {
+pub fn get_daily_stats(db: State<'_, ReadDb>) -> CmdResult<Vec<Value>> {
     let conn = db.0.lock().map_err(err)?;
     query_json(
         &conn,
@@ -403,15 +409,18 @@ pub fn get_daily_stats(db: State<'_, Db>) -> CmdResult<Vec<Value>> {
 }
 
 // ended_at is Unix seconds; the Analytics tab groups by local date/hour itself.
+// `since` (Unix seconds) leaves out anything older, for callers that only need
+// recent weeks; the created_at index makes that a range scan.
 #[tauri::command(async)]
-pub fn get_sessions(db: State<'_, Db>) -> CmdResult<Vec<Value>> {
+pub fn get_sessions(db: State<'_, ReadDb>, since: Option<i64>) -> CmdResult<Vec<Value>> {
     let conn = db.0.lock().map_err(err)?;
     query_json(
         &conn,
         "SELECT id, course_id, duration, CAST(strftime('%s', created_at) AS INTEGER) AS ended_at
          FROM study_sessions
+         WHERE ?1 IS NULL OR created_at >= datetime(?1, 'unixepoch')
          ORDER BY created_at ASC",
-        &[],
+        &[&since],
     )
     .map_err(err)
 }
@@ -563,7 +572,7 @@ pub fn delete_task(db: State<'_, Db>, trash: State<'_, Trash>, task_id: String) 
 }
 
 #[tauri::command(async)]
-pub fn get_task_stats(db: State<'_, Db>) -> CmdResult<Vec<Value>> {
+pub fn get_task_stats(db: State<'_, ReadDb>) -> CmdResult<Vec<Value>> {
     let conn = db.0.lock().map_err(err)?;
     query_json(
         &conn,
@@ -692,19 +701,20 @@ mod tests {
         let mut conn = setup();
         let id = add_session_at(&mut conn, "a", ENDED, 3600, Some("  ch. 4  ")).unwrap();
         assert_eq!(total(&conn, "a"), 3600);
-        let stored: String = conn
-            .query_row("SELECT created_at FROM study_sessions WHERE id = ?", [id], |r| r.get(0))
-            .unwrap();
+        let stored: String =
+            conn.query_row("SELECT created_at FROM study_sessions WHERE id = ?", [id], |r| r.get(0)).unwrap();
         assert_eq!(stored, "2026-09-21 14:13:20");
 
-        let note: Option<String> = conn.query_row("SELECT note FROM study_sessions WHERE id = ?", [id], |r| r.get(0)).unwrap();
+        let note: Option<String> =
+            conn.query_row("SELECT note FROM study_sessions WHERE id = ?", [id], |r| r.get(0)).unwrap();
         assert_eq!(note.as_deref(), Some("ch. 4"));
 
         // Moving it to another subject and shortening it moves the time too.
         update_session_at(&mut conn, id, "b", ENDED, 1800, Some("")).unwrap();
         assert_eq!(total(&conn, "a"), 0);
         assert_eq!(total(&conn, "b"), 1800);
-        let note: Option<String> = conn.query_row("SELECT note FROM study_sessions WHERE id = ?", [id], |r| r.get(0)).unwrap();
+        let note: Option<String> =
+            conn.query_row("SELECT note FROM study_sessions WHERE id = ?", [id], |r| r.get(0)).unwrap();
         assert_eq!(note, None, "an empty note is removed");
     }
 
@@ -746,7 +756,8 @@ mod tests {
         let mut conn = setup();
         add_session_at(&mut conn, "a", ENDED, 600, None).unwrap();
         conn.execute("INSERT INTO tasks (id, course_id, text, completed) VALUES ('t1', 'a', 'Read', 1)", []).unwrap();
-        conn.execute("UPDATE courses SET weekly_goal_seconds = 7200, exam_date = '2027-01-15' WHERE id = 'a'", []).unwrap();
+        conn.execute("UPDATE courses SET weekly_goal_seconds = 7200, exam_date = '2027-01-15' WHERE id = 'a'", [])
+            .unwrap();
         let trash = Trash::default();
         let undo = trash.put(delete_course_at(&mut conn, "a").unwrap()).unwrap();
         let count = |conn: &Connection, sql: &str| conn.query_row(sql, [], |r| r.get::<_, i64>(0)).unwrap();
@@ -839,8 +850,10 @@ mod tests {
         assert_eq!(done_at, None, "unticking clears it");
 
         // Time spent on a task adds up from its sessions.
-        conn.execute("INSERT INTO study_sessions (course_id, duration, task_id) VALUES ('a', 600, ?)", [&read]).unwrap();
-        conn.execute("INSERT INTO study_sessions (course_id, duration, task_id) VALUES ('a', 300, ?)", [&read]).unwrap();
+        conn.execute("INSERT INTO study_sessions (course_id, duration, task_id) VALUES ('a', 600, ?)", [&read])
+            .unwrap();
+        conn.execute("INSERT INTO study_sessions (course_id, duration, task_id) VALUES ('a', 300, ?)", [&read])
+            .unwrap();
         let tasks = tasks_of(&conn, "a").unwrap();
         let logged = tasks.iter().find(|t| t["id"] == read.as_str()).unwrap()["logged_seconds"].as_i64();
         assert_eq!(logged, Some(900));

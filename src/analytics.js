@@ -71,9 +71,26 @@ function renderTermFilter() {
     .join('');
 }
 
-if (window.Chart) {
-  Chart.defaults.font.family = "'Plus Jakarta Sans', sans-serif";
-  Chart.defaults.color = '#9ca3af';
+// Chart.js is only needed on this page, so it loads on first visit instead of
+// delaying startup. build-ui.js copies it to vendor/.
+let chartLoading = null;
+function loadChartJs() {
+  if (window.Chart) return Promise.resolve();
+  chartLoading ??= new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = '../vendor/chart.js/dist/chart.umd.min.js';
+    script.onload = () => {
+      Chart.defaults.font.family = "'Plus Jakarta Sans', sans-serif";
+      Chart.defaults.color = '#9ca3af';
+      resolve();
+    };
+    script.onerror = () => {
+      chartLoading = null; // allow a retry on the next visit
+      reject(new Error('Could not load the charts library'));
+    };
+    document.head.appendChild(script);
+  });
+  return chartLoading;
 }
 
 function courseCode(courseId) {
@@ -121,7 +138,11 @@ function sumDays(dates) {
 
 export async function renderAnalyticsPage() {
   try {
-    const [sessions, taskStats] = await Promise.all([window.api.getSessions(), window.api.getTaskStats()]);
+    const [sessions, taskStats] = await Promise.all([
+      window.api.getSessions(),
+      window.api.getTaskStats(),
+      loadChartJs(),
+    ]);
     renderTermFilter();
     analyticsSessions = analyticsTerm ? sessions.filter(s => inScope(s.course_id)) : sessions;
     analyticsDays = buildDayMap(analyticsSessions);

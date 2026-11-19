@@ -26,18 +26,14 @@ const CLOSE_TO_TRAY_KEY: &str = "close_to_tray";
 
 fn setting_on(app: &AppHandle, key: &str) -> bool {
     // try_state: the main window exists slightly before setup manages the database.
-    app.try_state::<Db>()
-        .and_then(|db| db.0.lock().ok().map(|c| db::setting_bool(&c, key, false)))
-        .unwrap_or(false)
+    app.try_state::<Db>().and_then(|db| db.0.lock().ok().map(|c| db::setting_bool(&c, key, false))).unwrap_or(false)
 }
 
 // Shows the floating timer when the main window goes out of sight (minimized or
 // hidden to the tray) during a session, if that's turned on.
 fn widget_if_studying(app: &AppHandle) {
-    let studying = app
-        .try_state::<Timer>()
-        .and_then(|t| t.0.lock().ok().map(|s| s.phase != Phase::Idle))
-        .unwrap_or(false);
+    let studying =
+        app.try_state::<Timer>().and_then(|t| t.0.lock().ok().map(|s| s.phase != Phase::Idle)).unwrap_or(false);
     if studying && setting_on(app, MINI_WIDGET_SETTING_KEY) {
         let app = app.clone();
         // Creating a window from inside the event loop's own callback can
@@ -173,6 +169,7 @@ pub fn run() {
                 serde_json::json!({ "recovered": false })
             });
             app.manage(Db(Mutex::new(conn)));
+            app.manage(db::ReadDb(Mutex::new(db::open_read_db()?)));
             app.manage(Timer(Mutex::new(TimerState::default())));
             app.manage(Recovery(Mutex::new(Some(recovery))));
             app.manage(PendingUpdate(Mutex::new(None)));

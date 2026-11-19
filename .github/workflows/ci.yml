@@ -1,11 +1,14 @@
-# Runs the Rust tests on every push and pull request, so a break shows up right
-# away instead of when a release is tagged.
+# Runs the Rust tests, lints and a release-style frontend build on every push and
+# pull request, so a break shows up right away instead of when a release is tagged.
+# A weekly run also audits the dependencies, since advisories appear without pushes.
 name: CI
 
 on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: '0 6 * * 1'
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -23,6 +26,8 @@ jobs:
           cache: npm
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
 
       - uses: swatinem/rust-cache@v2
         with:
@@ -30,8 +35,39 @@ jobs:
 
       - run: npm ci
 
+      - name: Formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+
+      # The release build bundles and minifies the frontend, so this also catches
+      # a syntax error or a broken import in src/.
+      - name: Frontend build
+        run: node build-ui.js --minify
+
       # The Rust build embeds tauri-ui-dist/, which isn't in git.
+      - name: Lints
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
       - name: Tests
-        run: |
-          node build-ui.js
-          cargo test --manifest-path src-tauri/Cargo.toml
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: npm audit
+        run: npm audit --audit-level=high
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      - name: cargo audit
+        run: cargo audit --file src-tauri/Cargo.lock

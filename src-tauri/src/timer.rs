@@ -27,7 +27,7 @@ pub const SHORT_BREAK_MIN: (&str, i64) = ("pomodoro_short_break_min", 5);
 pub const LONG_BREAK_MIN: (&str, i64) = ("pomodoro_long_break_min", 15);
 pub const LONG_BREAK_EVERY: (&str, i64) = ("pomodoro_long_break_every", 4); // pomodoros
 pub const IDLE_MIN: (&str, i64) = ("idle_threshold_min", 10); // 0 turns idle detection off
-// Start the next Pomodoro by itself when a break ends.
+                                                              // Start the next Pomodoro by itself when a break ends.
 pub const AUTO_CONTINUE: (&str, bool) = ("pomodoro_auto_continue", false);
 
 // Desktop notifications (shown while the window isn't in front), by type, and
@@ -166,11 +166,8 @@ impl TimerState {
 
     pub fn snapshot(&self, conn: &Connection, now: i64) -> Value {
         let shown = self.shown_secs(now);
-        let time_str = if self.phase == Phase::Idle {
-            String::new()
-        } else {
-            format_clock(shown, self.target_secs == 0)
-        };
+        let time_str =
+            if self.phase == Phase::Idle { String::new() } else { format_clock(shown, self.target_secs == 0) };
         let every = setting_i64(conn, LONG_BREAK_EVERY.0, LONG_BREAK_EVERY.1, 1, 12);
         json!({
             "phase": match self.phase { Phase::Idle => "idle", Phase::Focus => "focus", Phase::Break => "break" },
@@ -193,11 +190,9 @@ impl TimerState {
 }
 
 fn course_info(conn: &Connection, course_id: &str) -> rusqlite::Result<Option<(String, String, bool)>> {
-    conn.query_row(
-        "SELECT code, title, COALESCE(archived, 0) FROM courses WHERE id = ?",
-        [course_id],
-        |r| Ok((r.get(0)?, r.get(1)?, r.get::<_, i64>(2)? != 0)),
-    )
+    conn.query_row("SELECT code, title, COALESCE(archived, 0) FROM courses WHERE id = ?", [course_id], |r| {
+        Ok((r.get(0)?, r.get(1)?, r.get::<_, i64>(2)? != 0))
+    })
     .optional()
 }
 
@@ -390,7 +385,12 @@ pub fn set_note(state: &mut TimerState, conn: &Connection, note: Option<String>)
 
 // Sets the task the session is spent on (None to clear it). `course_id` is the
 // subject it's picked for: the running one, or the one about to be started.
-pub fn set_task(state: &mut TimerState, conn: &Connection, task_id: Option<String>, course_id: &str) -> Result<(), String> {
+pub fn set_task(
+    state: &mut TimerState,
+    conn: &Connection,
+    task_id: Option<String>,
+    course_id: &str,
+) -> Result<(), String> {
     if state.phase == Phase::Focus && state.course_id.as_deref() != Some(course_id) {
         return Err("The timer is running on another subject".into());
     }
@@ -520,8 +520,7 @@ pub fn resolve_idle(state: &mut TimerState, conn: &Connection, keep: bool) -> Re
         return Ok(());
     }
     state.start_ms += (back_ms - from_ms).max(0);
-    conn.execute("UPDATE active_session SET start_timestamp = ? WHERE id = 1", [state.start_ms])
-        .map_err(db::err)?;
+    conn.execute("UPDATE active_session SET start_timestamp = ? WHERE id = 1", [state.start_ms]).map_err(db::err)?;
     Ok(())
 }
 
@@ -552,7 +551,7 @@ pub fn recover(conn: &mut Connection, now: i64) -> rusqlite::Result<Value> {
 
     // Guard against nonsense values (clock changes, absurdly long gaps).
     const MAX_REASONABLE: i64 = 12 * 60 * 60;
-    if duration < MIN_SESSION_SECS || duration > MAX_REASONABLE {
+    if !(MIN_SESSION_SECS..=MAX_REASONABLE).contains(&duration) {
         clear_active(conn);
         return Ok(json!({ "recovered": false, "discarded": true, "duration": duration }));
     }
@@ -581,8 +580,33 @@ pub fn recover(conn: &mut Connection, now: i64) -> rusqlite::Result<Value> {
 pub const MAIN_LABEL: &str = "main";
 pub const MINI_LABEL: &str = "mini";
 
+// While nothing is running the ticker has nothing to do, so it sleeps on this
+// until a command changes the timer (every change goes through broadcast).
+// The flag makes a wake that arrives before the wait begins stick.
+static TICKER_WAKE: (std::sync::Mutex<bool>, std::sync::Condvar) =
+    (std::sync::Mutex::new(false), std::sync::Condvar::new());
+
+// Slow safety net in case a state change ever skips broadcast.
+const PARKED_MAX: Duration = Duration::from_secs(5);
+
+fn wake_ticker() {
+    if let Ok(mut flag) = TICKER_WAKE.0.lock() {
+        *flag = true;
+        TICKER_WAKE.1.notify_one();
+    }
+}
+
+fn park_ticker() {
+    if let Ok(flag) = TICKER_WAKE.0.lock() {
+        if let Ok((mut flag, _)) = TICKER_WAKE.1.wait_timeout_while(flag, PARKED_MAX, |woken| !*woken) {
+            *flag = false;
+        }
+    }
+}
+
 // Sends the current state to every window, the tray and the floating widget.
 pub fn broadcast(app: &AppHandle, snap: &Value) {
+    wake_ticker();
     let _ = app.emit("timer-state", snap.clone());
     crate::tray::update(app, snap);
     if snap["isStudying"] == Value::Bool(false) {
@@ -629,7 +653,12 @@ impl NotifyPrefs {
                 .and_then(|db| db.0.lock().ok().map(|c| db::setting_bool(&c, key, default)))
                 .unwrap_or(default)
         };
-        NotifyPrefs { pomodoro: get(NOTIFY_POMODORO), away: get(NOTIFY_AWAY), session: get(NOTIFY_SESSION), sound: get(SOUND) }
+        NotifyPrefs {
+            pomodoro: get(NOTIFY_POMODORO),
+            away: get(NOTIFY_AWAY),
+            session: get(NOTIFY_SESSION),
+            sound: get(SOUND),
+        }
     }
 }
 
@@ -671,12 +700,19 @@ pub fn publish_events(app: &AppHandle, events: &[Value]) {
             Some("pomodoro-complete") if ev["autoStarted"] == Value::Bool(true) => notify(
                 app,
                 "Pomodoro complete",
-                &format!("{} added to {code}. The next one has started.", short_duration(ev["duration"].as_i64().unwrap_or(0))),
+                &format!(
+                    "{} added to {code}. The next one has started.",
+                    short_duration(ev["duration"].as_i64().unwrap_or(0))
+                ),
             ),
             Some("pomodoro-complete") => {
                 let brk = ev["breakSecs"].as_i64().unwrap_or(0);
                 let body = if brk > 0 {
-                    format!("{} added to {code}. Take a {}-minute break.", short_duration(ev["duration"].as_i64().unwrap_or(0)), brk / 60)
+                    format!(
+                        "{} added to {code}. Take a {}-minute break.",
+                        short_duration(ev["duration"].as_i64().unwrap_or(0)),
+                        brk / 60
+                    )
                 } else {
                     format!("{} added to {code}.", short_duration(ev["duration"].as_i64().unwrap_or(0)))
                 };
@@ -740,9 +776,8 @@ pub fn toggle(app: &AppHandle) -> Result<(), String> {
         }
         let mode = Mode::parse(&db::get_setting_value(conn, "timer_mode").ok().flatten().unwrap_or_default());
         let picked = db::get_setting_value(conn, "active_course_id").ok().flatten();
-        let course_id: Option<String> = picked
-            .filter(|id| matches!(course_info(conn, id), Ok(Some((_, _, false)))))
-            .or_else(|| {
+        let course_id: Option<String> =
+            picked.filter(|id| matches!(course_info(conn, id), Ok(Some((_, _, false))))).or_else(|| {
                 conn.query_row(
                     "SELECT id FROM courses WHERE COALESCE(archived, 0) = 0 ORDER BY rowid LIMIT 1",
                     [],
@@ -764,8 +799,14 @@ pub fn spawn_ticker(app: AppHandle) {
     std::thread::spawn(move || {
         let mut last_shown: Option<(i64, Phase)> = None;
         let mut last_idle_check = 0;
+        let mut parked = false;
         loop {
-            std::thread::sleep(Duration::from_millis(250));
+            if parked {
+                park_ticker();
+                parked = false;
+            } else {
+                std::thread::sleep(Duration::from_millis(250));
+            }
             let now = now_ms();
             // Asking Windows for the idle time is cheap, but once every 2s is plenty.
             let idle_ms = if now - last_idle_check >= 2000 {
@@ -778,7 +819,8 @@ pub fn spawn_ticker(app: AppHandle) {
             let db = app.state::<Db>();
             let (events, snap, changed) = {
                 let (Ok(mut state), Ok(mut conn)) = (timer.0.lock(), db.0.lock()) else { continue };
-                if state.phase == Phase::Idle && last_shown.map_or(false, |(_, p)| p == Phase::Idle) {
+                if state.phase == Phase::Idle && last_shown.is_some_and(|(_, p)| p == Phase::Idle) {
+                    parked = true;
                     continue;
                 }
                 let events = tick(&mut state, &mut conn, now, idle_ms);
@@ -803,8 +845,11 @@ mod tests {
 
     fn conn_with_course() -> Connection {
         let conn = test_conn();
-        conn.execute("INSERT INTO courses (id, title, code, total_seconds) VALUES ('c1', 'Algorithms', 'CS101', 0)", [])
-            .unwrap();
+        conn.execute(
+            "INSERT INTO courses (id, title, code, total_seconds) VALUES ('c1', 'Algorithms', 'CS101', 0)",
+            [],
+        )
+        .unwrap();
         conn
     }
 
@@ -1170,7 +1215,7 @@ mod tests {
     fn recovery_credits_time_up_to_the_last_heartbeat() {
         let mut conn = conn_with_course();
         put_active(&conn, T0, "stopwatch", Some(T0 + 600_000));
-        let r = recover(&mut conn, T0 + 5 * 3600_000).unwrap();
+        let r = recover(&mut conn, T0 + 5 * 3_600_000).unwrap();
         assert_eq!(r["recovered"], true);
         assert_eq!(r["duration"], 600);
         assert_eq!(r["courseCode"], "CS101");
@@ -1183,13 +1228,13 @@ mod tests {
     fn recovery_caps_pomodoros_at_the_focus_length() {
         let mut conn = conn_with_course();
         set_setting_value(&conn, FOCUS_MIN.0, "50").unwrap();
-        put_active(&conn, T0, "pomodoro", Some(T0 + 2 * 3600_000));
+        put_active(&conn, T0, "pomodoro", Some(T0 + 2 * 3_600_000));
         assert_eq!(recover(&mut conn, T0).unwrap()["duration"], 50 * 60);
     }
 
     #[test]
     fn recovery_discards_unreliable_sessions() {
-        for (hb, why) in [(T0 + 20_000, "too short"), (T0 + 13 * 3600_000, "too long")] {
+        for (hb, why) in [(T0 + 20_000, "too short"), (T0 + 13 * 3_600_000, "too long")] {
             let mut conn = conn_with_course();
             put_active(&conn, T0, "stopwatch", Some(hb));
             let r = recover(&mut conn, T0).unwrap();

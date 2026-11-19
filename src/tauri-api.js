@@ -24,7 +24,8 @@
     updateSession: (sessionId, courseId, endedAt, duration, note) => invoke('update_session', { sessionId, courseId, endedAt, duration, note }),
     deleteSession: (sessionId) => invoke('delete_session', { sessionId }),
     getDailyStats: () => invoke('get_daily_stats'),
-    getSessions: () => invoke('get_sessions'),
+    // since: Unix seconds, or omitted for every session.
+    getSessions: (since) => invoke('get_sessions', { since: since ?? null }),
 
     // Tasks
     getTasks: (courseId) => invoke('get_tasks', { courseId }),

@@ -30,12 +30,20 @@ impl Deleted {
     }
 
     // Copies the rows `DELETE FROM table WHERE <filter>` is about to remove.
-    pub fn keep(&mut self, tx: &Transaction, table: &'static str, filter: &str, arg: &dyn rusqlite::ToSql) -> rusqlite::Result<()> {
+    pub fn keep(
+        &mut self,
+        tx: &Transaction,
+        table: &'static str,
+        filter: &str,
+        arg: &dyn rusqlite::ToSql,
+    ) -> rusqlite::Result<()> {
         let mut stmt = tx.prepare(&format!("SELECT * FROM {table} WHERE {filter}"))?;
         let names: Vec<String> = stmt.column_names().map(|s| s.to_string()).collect();
         let rows = stmt
             .query_map([arg], |r| {
-                (0..names.len()).map(|i| Ok((names[i].clone(), r.get::<_, SqlValue>(i)?))).collect::<rusqlite::Result<Row>>()
+                (0..names.len())
+                    .map(|i| Ok((names[i].clone(), r.get::<_, SqlValue>(i)?)))
+                    .collect::<rusqlite::Result<Row>>()
             })?
             .collect::<rusqlite::Result<Vec<Row>>>()?;
         if !rows.is_empty() {

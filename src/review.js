@@ -44,10 +44,12 @@ export async function maybeShowWeeklyReview() {
     if ((await window.api.getSetting('weekly_review')) === 'false') return;
     const thisMonday = localDateKey(mondayOf(new Date()));
     if ((await window.api.getSetting(SEEN_KEY)) === thisMonday) return;
-    const sessions = await window.api.getSessions();
+    // Deciding whether to show it only needs last week; the modal loads the rest.
+    const since = Math.floor(addDays(mondayOf(new Date()), -15).getTime() / 1000);
+    const sessions = await window.api.getSessions(since);
     await window.api.setSetting(SEEN_KEY, thisMonday);
     const last = weekData(sessions, addDays(mondayOf(new Date()), -7));
-    if (last.total > 0 && !document.querySelector('.modal-overlay.open')) openWeeklyReview(1, sessions);
+    if (last.total > 0 && !document.querySelector('.modal-overlay.open')) openWeeklyReview(1);
   } catch (err) {
     console.error('Weekly review check failed:', err);
   }
