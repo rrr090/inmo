@@ -1,10 +1,11 @@
 // Optional inmo accounts, backed by Supabase (see supabase/schema.sql). Lives in
 // Settings → Account. With EMAIL_CODES on, sign-up and password resets are
 // confirmed with a 6-digit code from an email, so there is no browser round trip;
-// without it, sign-up is confirmed by the email's link and there is no reset yet. An account holds only a profile for now; study data
-// stays on this computer.
+// without it, sign-up is confirmed by the email's link and there is no reset yet.
+// While signed in, sync.js keeps the study data in step with the account.
 import { showToast, confirmDialog } from './notify.js';
 import { escapeHtml, errorText } from './format.js';
+import { syncNow, renderSyncStatus } from './sync.js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY, EMAIL_CODES, EMAIL_LINK_LANDING } from './supabase-config.js';
 
 // Where an email's confirmation link lands. Without it, Supabase sends the
@@ -38,6 +39,10 @@ function loadLibrary() {
   return loading;
 }
 
+// For sync.js: the client, and who is signed in (null when nobody is).
+export const accountClient = () => getClient();
+export const currentUser = () => user;
+
 async function getClient() {
   if (client) return client;
   await loadLibrary();
@@ -52,7 +57,10 @@ async function getClient() {
     if (user) {
       view = 'account';
       // Not from inside this callback: Supabase holds a lock while it runs.
-      setTimeout(loadProfile, 0);
+      setTimeout(() => {
+        loadProfile();
+        syncNow();
+      }, 0);
     } else if (view === 'account' || view === 'edit-name') {
       view = 'signin';
     }
@@ -183,7 +191,7 @@ function views() {
             <span>${escapeHtml(user.email || '')}</span>
           </div>
         </div>
-        <p class="section-sub account-note">Your study data still stays on this computer. Syncing between devices is coming in a later version.</p>
+        <p id="sync-status" class="section-sub account-note sync-status"></p>
         <div class="account-actions">
           <button type="button" class="btn-outline" data-go="edit-name">Change name</button>
           <button type="button" class="btn-outline" data-action="signout">Sign out</button>
@@ -193,7 +201,7 @@ function views() {
     default:
       return `
         <form class="account-form" data-submit="signin">
-          <p class="section-sub">Optional. An account will let you sync between devices and study with friends in later versions.</p>
+          <p class="section-sub">Optional. Sign in to sync your subjects, tasks and sessions between devices.</p>
           ${field('acc-email', 'Email', 'email', `required autocomplete="email" value="${email}"`)}
           ${field('acc-password', 'Password', 'password', 'required autocomplete="current-password"')}
           <div class="account-actions">
@@ -214,6 +222,7 @@ export function renderAccount() {
   }
   if ((view === 'account' || view === 'edit-name') && !user) view = 'signin';
   body.innerHTML = views();
+  renderSyncStatus();
   body.classList.toggle('busy', busy);
   body.querySelector('input:not([type="hidden"])')?.focus();
 }
@@ -303,6 +312,7 @@ const SUBMIT = {
 };
 
 const ACTIONS = {
+  sync: () => syncNow(),
   resend: () => run(async (sb) => {
     const { error } = await sb.auth.resend({ type: 'signup', email: pendingEmail, options: linkOptions });
     if (error) throw error;
@@ -319,7 +329,7 @@ const ACTIONS = {
   delete: async () => {
     const ok = await confirmDialog({
       title: 'Delete your inmo account?',
-      message: 'Your account and profile are removed from the server for good. Your study data on this computer is not touched.',
+      message: 'Your account, profile and synced data are removed from the server for good. Your study data on this computer is not touched.',
       confirmLabel: 'Delete account',
     });
     if (!ok) return;

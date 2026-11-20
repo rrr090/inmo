@@ -57,6 +57,7 @@ pub fn open_db() -> rusqlite::Result<Connection> {
     let conn = Connection::open(&path)?;
     tune(&conn);
     backup_before_first_tauri_launch(&conn);
+    backup_before_sync_columns(&conn);
     migrate(&conn)?;
     weekly_backup(&conn);
     Ok(conn)
@@ -143,6 +144,8 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
          CREATE INDEX IF NOT EXISTS idx_tasks_course ON tasks(course_id, position);
          CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(due_date);",
     )?;
+    // 1.4: change tracking for sync with an account.
+    crate::sync::migrate(conn)?;
     Ok(())
 }
 
@@ -233,6 +236,25 @@ fn backup_before_first_tauri_launch(conn: &Connection) {
     }
 }
 
+// The first launch with sync adds columns and triggers to the subjects, tasks and
+// sessions tables; keep a copy from before, in case that ever needs undoing.
+fn backup_before_sync_columns(conn: &Connection) {
+    let backup = backups_dir().join("academic_steam_spotify-before-sync.db");
+    let has_courses = conn
+        .query_row("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'courses'", [], |r| {
+            r.get::<_, i64>(0)
+        })
+        .unwrap_or(0)
+        > 0;
+    let migrated = conn.prepare("SELECT sync_dirty FROM courses LIMIT 0").is_ok();
+    if backup.exists() || !has_courses || migrated {
+        return;
+    }
+    if let Err(e) = snapshot(conn, &backup) {
+        eprintln!("Backup before sync columns failed: {e}");
+    }
+}
+
 pub const AUTO_BACKUPS_KEPT: usize = 8;
 const AUTO_BACKUP_EVERY_DAYS: u64 = 7;
 
@@ -311,7 +333,7 @@ mod tests {
                 r.get(0)
             })
             .unwrap();
-        assert_eq!(indexes, 5);
+        assert_eq!(indexes, 6); // 5 for queries, plus unique session uids for sync
 
         let reader = Connection::open_with_flags(&path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
         conn.execute("INSERT INTO courses (id, title, code) VALUES ('c', 'Algebra', 'M1')", []).unwrap();

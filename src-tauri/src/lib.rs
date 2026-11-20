@@ -5,6 +5,7 @@ mod commands;
 mod data_io;
 mod db;
 mod idle;
+mod sync;
 mod timer;
 mod trash;
 mod tray;
@@ -268,6 +269,11 @@ pub fn run() {
             data_io::backup_now,
             data_io::open_backups_folder,
             data_io::restore_backup,
+            sync::sync_link,
+            sync::sync_pending,
+            sync::sync_mark_pushed,
+            sync::sync_apply,
+            sync::sync_cursors,
             tray::get_shortcut,
             tray::set_shortcut_enabled,
             tray::get_autostart,

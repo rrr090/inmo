@@ -1079,3 +1079,5 @@
     .account-who span { font-size: 12px; color: var(--text-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .account-note { margin: 12px 0 10px; }
     #account-body.busy { opacity: 0.6; pointer-events: none; }
+    .sync-status.error span { color: #fbbf24; }
+    .sync-status .link-btn { margin-left: 4px; }

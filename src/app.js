@@ -15,6 +15,7 @@ import { maybeShowWeeklyReview, openWeeklyReview } from './review.js';
 import { initShortcuts, openShortcutHelp } from './shortcuts.js';
 import * as today from './today.js';
 import { initAccount, wireAccount } from './account.js';
+import { initSync, scheduleSync, syncNow } from './sync.js';
 
 async function init() {
   renderIcons();
@@ -27,6 +28,7 @@ async function init() {
     onDataChanged(tasks.loadTasks);
     onDataChanged(renderTimerRing);
     onDataChanged(today.loadToday);
+    onDataChanged(() => scheduleSync());
     onDataChanged(() => analytics.isAnalyticsPageActive() && analytics.renderAnalyticsPage());
     onDataChanged(() => history.isHistoryPageActive() && history.renderHistory());
 
@@ -37,7 +39,8 @@ async function init() {
     settings.listenForUpdates();
     initShortcuts();
     wireAccount();
-    initAccount().catch(err => console.error('Account error:', err));
+    initSync();
+    initAccount().then(syncNow).catch(err => console.error('Account error:', err));
     await maybeShowWeeklyReview();
   } catch (err) {
     console.error('Initialization error:', err);

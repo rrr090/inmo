@@ -68,6 +68,13 @@
     openBackupsFolder: () => invoke('open_backups_folder'),
     restoreBackup: () => invoke('restore_backup'),
 
+    // Sync with an account (src/sync.js, src-tauri/src/sync.rs)
+    syncLink: (userId) => invoke('sync_link', { userId }),
+    syncPending: () => invoke('sync_pending'),
+    syncMarkPushed: (table, rows) => invoke('sync_mark_pushed', { table, rows }),
+    syncApply: (table, rows, cursor) => invoke('sync_apply', { table, rows, cursor }),
+    syncCursors: () => invoke('sync_cursors'),
+
     // Updates
     getUpdateStatus: () => invoke('get_update_status'),
     checkForUpdates: () => invoke('check_for_updates'),

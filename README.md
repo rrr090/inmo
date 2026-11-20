@@ -39,7 +39,7 @@ A desktop study tracker for university courses. Time your study sessions per sub
 - **Crash recovery:** a running session is saved as soon as it starts, so a crash or power cut doesn't lose your time. Closing inmo saves it normally.
 - **Backups:** a weekly copy of your data (the newest 8 are kept), a "Back up now" button, and restore from any backup in Settings.
 - **Auto-updates:** new versions download in the background and install when you close inmo. Settings also has "Check now".
-- **Accounts (optional):** create an account in Settings with your email (confirmed by an emailed link), and sign in, change your name or delete the account there. For now it holds only your profile; syncing between devices and studying with friends will build on it.
+- **Accounts (optional):** create an account in Settings with your email (confirmed by an emailed link), and sign in, change your name or delete the account there. While you're signed in, your subjects, tasks and sessions sync with the account, so they follow you to other computers. inmo keeps working from its own database, offline included, and catches up when it's back online. Settings stay per computer.
 - **One window:** opening inmo while it's already running brings the existing window forward instead of starting a second copy.
 
 ## Install
@@ -133,6 +133,6 @@ The interface never touches the database directly. It reaches it only through th
 
 ## Data and privacy
 
-Your study data lives in `%APPDATA%\inmo\academic_steam_spotify.db`, a local SQLite file. Weekly backups go to `%APPDATA%\inmo\backups\`. Your study data is never uploaded.
+Your study data lives in `%APPDATA%\inmo\academic_steam_spotify.db`, a local SQLite file. Weekly backups go to `%APPDATA%\inmo\backups\`. Without an account, your study data never leaves this computer.
 
-Accounts are optional. If you create one (Settings → Account), the server keeps your email address, your password (hashed) and the name you choose, and nothing else. Deleting the account in Settings removes all of that. Without an account, the only network request is the update check against GitHub Releases.
+Accounts are optional. If you create one (Settings → Account), the server keeps your email address, your password (hashed) and the name you choose, and, while you're signed in, a copy of your subjects, tasks and sessions (notes included) so other devices can sync. Settings aren't uploaded. Only you can read your rows. Deleting the account in Settings removes all of it from the server; the copy on this computer stays. Without an account, the only network request is the update check against GitHub Releases.
