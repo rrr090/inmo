@@ -1,16 +1,14 @@
-// The Timer page's view of the day around the clock: four tiles (today, this
-// week, streak, sessions), a timeline of today's sessions, and a card for the
-// subject the timer is on. Sessions since last Monday are loaded on each data
+// The Timer page's view of the day around the clock: a timeline of today's
+// sessions and a card for the subject the timer is on. This week's sessions are loaded on each data
 // change; the running session is added on every timer tick without a reload.
 import { icon } from './icons.js';
 import { state, getActiveCourse, courseById, reloadData } from './state.js';
-import { escapeHtml, formatCompact, addDays, weekdayIndex, fmtDay, parseDateKey, errorText } from './format.js';
+import { escapeHtml, formatCompact, weekdayIndex, fmtDay, parseDateKey, errorText } from './format.js';
 import { courseColor, swatch } from './colors.js';
 import { daysUntil, examPace } from './exams.js';
-import { currentStreak } from './subjects.js';
 import { showToast } from './notify.js';
 
-let sessions = [];       // since last Monday, { id, course_id, duration, ended_at }
+let sessions = [];       // since this Monday, { id, course_id, duration, ended_at }
 let editingGoal = false;
 
 function startOfToday() {
@@ -40,9 +38,9 @@ function sumSince(list, from, to = Infinity, courseId = null) {
 }
 
 export async function loadToday() {
-  const lastMonday = addDays(mondayOf(new Date()), -7);
+  const monday = mondayOf(new Date());
   try {
-    sessions = await window.api.getSessions(Math.floor(lastMonday.getTime() / 1000));
+    sessions = await window.api.getSessions(Math.floor(monday.getTime() / 1000));
   } catch (err) {
     console.error('Could not load this week\'s sessions:', err);
     sessions = [];
@@ -51,68 +49,8 @@ export async function loadToday() {
 }
 
 export function renderToday() {
-  renderTiles();
   renderTimeline();
   renderSubjectCard();
-}
-
-// ---------- Tiles ----------
-
-// `sub` may hold markup (the week tile's arrows); everything typed by a person is escaped before it gets here.
-function tile(label, value, sub, extra = '', barPct = null) {
-  return `
-    <div class="summary-tile ${extra}">
-      <div class="summary-tile-label">${label}</div>
-      <div class="summary-tile-value">${value}</div>
-      <div class="summary-tile-sub">${sub}</div>
-      ${barPct === null ? '' : `<div class="tile-bar"><div style="width: ${barPct}%"></div></div>`}
-    </div>`;
-}
-
-function renderTiles() {
-  const el = document.getElementById('today-tiles');
-  if (!el) return;
-  const live = liveSession();
-  const all = live ? [...sessions, live] : sessions;
-  const today = startOfToday();
-  const monday = mondayOf(today);
-  const lastMonday = addDays(monday, -7);
-
-  const todaySecs = sumSince(all, today);
-  const goal = state.dailyGoalSecs;
-  const goalPct = goal > 0 ? Math.min(100, Math.round((todaySecs / goal) * 100)) : 0;
-  const todaySub = !goal
-    ? 'No daily goal set'
-    : todaySecs >= goal ? 'Daily goal reached' : `${formatCompact(goal - todaySecs)} to your ${formatCompact(goal)} goal`;
-
-  const weekSecs = sumSince(all, monday);
-  // Last week up to the same point in the week, so Wednesday compares with last Wednesday.
-  const sameTimeLastWeek = new Date(Date.now() - 7 * 86400000);
-  const lastWeekSecs = sumSince(sessions, lastMonday, sameTimeLastWeek);
-  let weekSub = 'Nothing last week to compare';
-  if (lastWeekSecs > 0) {
-    const diff = weekSecs - lastWeekSecs;
-    weekSub = diff >= 0
-      ? `<span class="trend-up">▲ ${formatCompact(diff)}</span> vs last week so far`
-      : `<span class="trend-down">▼ ${formatCompact(-diff)}</span> vs last week so far`;
-  }
-
-  const streak = currentStreak();
-  const studiedToday = todaySecs > 0;
-  const streakSub = streak === 0
-    ? 'Study today to start one'
-    : studiedToday ? 'Kept going today' : 'Study today to keep it';
-
-  const todayList = all.filter(s => s.ended_at >= today.getTime() / 1000);
-  const longest = todayList.reduce((m, s) => Math.max(m, s.duration), 0);
-  const count = todayList.length;
-  const countSub = count ? `Longest ${formatCompact(longest)}` : 'None yet';
-
-  el.innerHTML =
-    tile('Today', formatCompact(todaySecs), todaySub, goal && todaySecs >= goal ? 'goal-met' : '', goal ? goalPct : null) +
-    tile('This week', formatCompact(weekSecs), weekSub) +
-    tile('Streak', streak ? `${streak} ${streak === 1 ? 'day' : 'days'}` : '—', streakSub, streak && studiedToday ? 'streak-on' : '') +
-    tile('Sessions today', String(count), countSub);
 }
 
 // ---------- Today's timeline ----------
@@ -302,7 +240,6 @@ export function renderTodayLive() {
   const running = state.timer.isStudying && state.timer.phase === 'focus';
   if (running && now - lastLive < 5000) return;
   lastLive = now;
-  renderTiles();
   renderTimeline();
   if (!editingGoal) renderSubjectCard();
 }

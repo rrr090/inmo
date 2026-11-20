@@ -843,6 +843,13 @@
     }
     .header-badge span { font-weight: 800; }
 
+    .streak-chip {
+      display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 999px;
+      font-size: 12px; font-weight: 700; color: var(--text-sub);
+      background: var(--bg-card); border: 1px solid var(--border-color);
+    }
+    .streak-chip.on { color: #fdba74; background: rgba(249, 115, 22, 0.1); border-color: rgba(249, 115, 22, 0.3); }
+
     /* Timer page: timer, today's timeline and exams on the left; the subject,
        its tasks and "Due soon" on the right. Narrower windows stack them:
        timer, today, subject, tasks, due soon, exams. */
@@ -995,16 +1002,7 @@
     .datepicker-foot .btn-secondary { padding: 6px 10px; font-size: 12px; }
     .datepicker-foot .btn-secondary:disabled { opacity: 0.4; cursor: default; }
 
-    /* Timer page: today's tiles, timeline and the current subject (today.js) */
-
-    .today-tiles { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
-    .today-tiles .summary-tile-value { font-variant-numeric: tabular-nums; }
-    .today-tiles .goal-met .summary-tile-value { color: var(--accent); }
-    .today-tiles .streak-on .summary-tile-value { color: #fdba74; }
-    .tile-bar { height: 4px; margin-top: 10px; background: var(--bg-surface); border-radius: 2px; overflow: hidden; }
-    .tile-bar > div { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.4s ease; }
-    .trend-up { color: var(--accent); font-weight: 700; }
-    .trend-down { color: #f87171; font-weight: 700; }
+    /* Timer page: today's timeline and the current subject (today.js) */
 
     #today-box .section-head { margin-bottom: 12px; }
     .today-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: flex-end; }
