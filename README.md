@@ -13,6 +13,7 @@ A desktop study tracker for university courses. Time your study sessions per sub
 ## Features
 
 - **Focus timer:** a stopwatch, or Pomodoros with automatic short and long breaks (lengths are up to you, and the next Pomodoro can start by itself after a break), logged against the subject you pick. A ring around the clock fills up as a Pomodoro or break runs, and otherwise with today's study time against your daily goal. The clock runs in the app's backend, so it keeps exact time while the window is minimized.
+- **Today at a glance:** the Timer page opens with today's time against your goal, this week against the same point last week, your streak and today's session count. Below the clock, a timeline shows each of today's sessions as a block in its subject's color, the running one included. A card for the current subject shows its time today, this week and in total, its weekly goal (set it right there) and its exam countdown.
 - **Away detection:** if the stopwatch runs with no keyboard or mouse activity for a while (10 minutes by default), inmo asks when you're back whether to keep that time.
 - **Tray and shortcut:** start or stop the timer from the tray icon or with Ctrl+Alt+S from any app. inmo can start with Windows, and the close button can send it to the tray instead of quitting.
 - **Subjects and tasks:** add, edit and archive courses, each with its own to-do list. Archived subjects keep their history and still count in analytics.

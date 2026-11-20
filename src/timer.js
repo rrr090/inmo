@@ -5,6 +5,7 @@ import { showToast, confirmDialog } from './notify.js';
 import { state, getActiveCourse, reloadData } from './state.js';
 import { escapeHtml, formatClock, formatDuration, formatCompact, localDateKey, errorText } from './format.js';
 import { renderWorkingOn } from './tasks.js';
+import { renderTodayLive } from './today.js';
 
 const PLAY_ICON = '<path d="M8 5v14l11-7z"/>';
 const STOP_ICON = '<path d="M6 6h12v12H6z"/>';
@@ -76,6 +77,7 @@ function applySnapshot(snap) {
   document.querySelector('.timer-section')?.classList.toggle('paused', paused);
 
   renderTimerRing();
+  renderTodayLive();
 
   // Don't overwrite what's being typed, or a change not yet saved.
   const noteInput = document.getElementById('session-note');

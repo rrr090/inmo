@@ -63,10 +63,9 @@
           <h1>Timer</h1>
           <p id="focus-date"></p>
         </div>
-        <div class="page-actions">
-          <span class="streak-chip" id="streak-chip"><span data-icon="flame" data-size="14"></span><span id="current-streak-val">No streak yet</span></span>
-        </div>
       </div>
+
+      <div class="summary-tiles today-tiles" id="today-tiles"></div>
 
       <div class="focus-grid">
       <div class="focus-col">
@@ -107,6 +106,16 @@
         </div>
       </div>
 
+      <div class="section-box" id="today-box">
+        <div class="section-head">
+          <h3 class="label-with-icon"><span data-icon="clock" data-size="16"></span>Today</h3>
+          <div class="today-legend" id="today-legend"></div>
+        </div>
+        <div class="today-track" id="today-track"></div>
+        <div class="today-axis" id="today-axis"></div>
+        <div class="today-empty is-hidden" id="today-empty">No sessions yet today. Press Space to start one.</div>
+      </div>
+
       <div class="section-box is-hidden" id="exams-box">
         <h3 class="label-with-icon"><span data-icon="calendar" data-size="16"></span>Upcoming exams</h3>
         <div id="exams-list"></div>
@@ -114,6 +123,8 @@
       </div>
 
       <div class="focus-col">
+      <div class="section-box subject-box is-hidden" id="subject-box"></div>
+
       <div class="section-box" id="active-course-todos-box">
         <div class="section-head">
           <h3 id="tasks-header-title">Tasks</h3>

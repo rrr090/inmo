@@ -361,14 +361,6 @@ export function openSubjectDialog(courseId) {
 function updateMetricsDashboard() {
   const date = document.getElementById('focus-date');
   if (date) date.innerText = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-  const streak = currentStreak();
-  const chip = document.getElementById('streak-chip');
-  if (chip) {
-    chip.classList.toggle('on', streak > 0);
-    chip.title = streak > 0 ? 'Days in a row with some study' : 'Study today to start a streak';
-  }
-  const streakVal = document.getElementById('current-streak-val');
-  if (streakVal) streakVal.innerText = streak === 0 ? 'No streak yet' : `${streak}-day streak`;
 }
 
 // Days in a row with study, counting back from today (or yesterday, if today has none yet).

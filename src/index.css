@@ -842,28 +842,25 @@
       padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; color: var(--text-sub);
     }
     .header-badge span { font-weight: 800; }
-    .streak-chip {
-      display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 999px;
-      font-size: 12px; font-weight: 700; color: var(--text-sub);
-      background: var(--bg-card); border: 1px solid var(--border-color);
-    }
-    .streak-chip.on { color: #fdba74; background: rgba(249, 115, 22, 0.1); border-color: rgba(249, 115, 22, 0.3); }
 
-    /* Timer page: timer and exams on the left, tasks and "Due soon" on the right.
-       Narrower windows stack them: timer, tasks, due soon, exams. */
+    /* Timer page: timer, today's timeline and exams on the left; the subject,
+       its tasks and "Due soon" on the right. Narrower windows stack them:
+       timer, today, subject, tasks, due soon, exams. */
     .focus-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
     .focus-col { display: contents; }
     .focus-grid .timer-section { order: 1; }
-    .focus-grid #active-course-todos-box { order: 2; }
-    .focus-grid #due-box { order: 3; }
-    .focus-grid #exams-box { order: 4; }
+    .focus-grid #today-box { order: 2; }
+    .focus-grid #subject-box { order: 3; }
+    .focus-grid #active-course-todos-box { order: 4; }
+    .focus-grid #due-box { order: 5; }
+    .focus-grid #exams-box { order: 6; }
     @media (min-width: 1180px) {
       .focus-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
       .focus-col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
       .focus-grid .task-list { max-height: 440px; }
     }
 
-    .timer-section { padding: 22px 24px 26px; gap: 14px; }
+    .timer-section { padding: 18px 24px 22px; gap: 12px; }
     .timer-course-badge {
       margin-top: 0; padding: 6px 12px; gap: 8px; max-width: 100%;
       background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 999px; box-shadow: none;
@@ -873,7 +870,7 @@
     .badge-sep { display: none; }
     .badge-title { color: var(--text-sub); font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
 
-    .timer-ring { position: relative; width: 264px; height: 264px; flex-shrink: 0; }
+    .timer-ring { position: relative; width: 232px; height: 232px; flex-shrink: 0; }
     .timer-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
     .timer-ring circle { fill: none; stroke-width: 5; }
     .timer-ring-track { stroke: rgba(255, 255, 255, 0.06); }
@@ -886,7 +883,7 @@
     .timer-ring-center {
       position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
     }
-    .time-display { font-size: 46px; letter-spacing: -2px; line-height: 1; font-variant-numeric: tabular-nums; }
+    .time-display { font-size: 42px; letter-spacing: -2px; line-height: 1; font-variant-numeric: tabular-nums; }
     .timer-ring-caption { font-size: 12px; font-weight: 600; color: var(--text-sub); text-align: center; max-width: 190px; }
     .timer-ring.full .timer-ring-caption { color: var(--accent); }
     .timer-status { margin: -4px 0 0; min-height: 16px; }
@@ -997,3 +994,71 @@
     .datepicker-foot { display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-color); }
     .datepicker-foot .btn-secondary { padding: 6px 10px; font-size: 12px; }
     .datepicker-foot .btn-secondary:disabled { opacity: 0.4; cursor: default; }
+
+    /* Timer page: today's tiles, timeline and the current subject (today.js) */
+
+    .today-tiles { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+    .today-tiles .summary-tile-value { font-variant-numeric: tabular-nums; }
+    .today-tiles .goal-met .summary-tile-value { color: var(--accent); }
+    .today-tiles .streak-on .summary-tile-value { color: #fdba74; }
+    .tile-bar { height: 4px; margin-top: 10px; background: var(--bg-surface); border-radius: 2px; overflow: hidden; }
+    .tile-bar > div { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.4s ease; }
+    .trend-up { color: var(--accent); font-weight: 700; }
+    .trend-down { color: #f87171; font-weight: 700; }
+
+    #today-box .section-head { margin-bottom: 12px; }
+    .today-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: flex-end; }
+    .today-legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-sub); }
+    .today-legend-item b { color: var(--text-main); font-variant-numeric: tabular-nums; }
+    .today-track {
+      position: relative; height: 40px; border-radius: 8px;
+      background: var(--bg-surface); border: 1px solid var(--border-color); overflow: hidden;
+    }
+    .today-grid { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(255, 255, 255, 0.04); }
+    .today-block {
+      position: absolute; top: 6px; bottom: 6px; min-width: 4px; border-radius: 4px;
+      background: var(--c); opacity: 0.9; transition: opacity 0.15s;
+    }
+    .today-block:hover { opacity: 1; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25); }
+    .today-block.live { animation: today-live 2s ease-in-out infinite; }
+    .today-block.live.paused { animation: none; opacity: 0.45; }
+    @keyframes today-live { 50% { opacity: 0.6; } }
+    .today-now { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--text-main); opacity: 0.55; }
+    .today-axis { position: relative; height: 16px; margin-top: 6px; }
+    .today-axis span {
+      position: absolute; transform: translateX(-50%);
+      font-size: 10px; font-weight: 600; color: var(--text-sub); font-variant-numeric: tabular-nums;
+    }
+    .today-axis span:first-child { transform: none; }
+    .today-axis span:last-child { transform: translateX(-100%); }
+    .today-empty { margin-top: 8px; font-size: 12px; color: var(--text-sub); }
+    @media (prefers-reduced-motion: reduce) { .today-block.live { animation: none; } }
+
+    .subject-box { box-shadow: inset 3px 0 0 var(--subject-color, var(--accent)); display: flex; flex-direction: column; gap: 14px; }
+    .subject-box.is-hidden { display: none; }
+    .subject-box-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .subject-box-head .swatch { width: 12px; height: 12px; }
+    .subject-box-name { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+    .subject-box-name b { font-size: 15px; font-weight: 800; }
+    .subject-box-name span { font-size: 12px; color: var(--text-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .subject-box-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .subject-box-stats > div {
+      display: flex; flex-direction: column; gap: 3px; padding: 10px 12px;
+      background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 8px; min-width: 0;
+    }
+    .subject-box-stats span { font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-sub); }
+    .subject-box-stats b { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .subject-box-goal .meta-row { font-size: 12px; }
+    .subject-box-goal .goal-bar { height: 6px; margin-top: 8px; }
+    .subject-box-goal .goal-bar > div { background: var(--subject-color, var(--accent)); }
+    .subject-box-note { margin-top: 6px; font-size: 11px; color: var(--text-sub); }
+    .subject-exam {
+      display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 12px; text-align: left;
+      background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 8px;
+      font-family: inherit; font-size: 12px; color: var(--text-sub); cursor: pointer;
+    }
+    .subject-exam:hover { border-color: var(--accent); }
+    .subject-exam b { color: var(--text-main); }
+    .subject-exam span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .subject-exam.soon { border-color: rgba(251, 191, 36, 0.35); background: rgba(251, 191, 36, 0.06); }
+    .subject-exam.soon b, .subject-exam.soon .icon { color: #fbbf24; }

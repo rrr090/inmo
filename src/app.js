@@ -13,6 +13,7 @@ import * as history from './history.js';
 import * as settings from './settings.js';
 import { maybeShowWeeklyReview, openWeeklyReview } from './review.js';
 import { initShortcuts, openShortcutHelp } from './shortcuts.js';
+import * as today from './today.js';
 
 async function init() {
   renderIcons();
@@ -24,6 +25,7 @@ async function init() {
     onDataChanged(subjects.renderSubjects);
     onDataChanged(tasks.loadTasks);
     onDataChanged(renderTimerRing);
+    onDataChanged(today.loadToday);
     onDataChanged(() => analytics.isAnalyticsPageActive() && analytics.renderAnalyticsPage());
     onDataChanged(() => history.isHistoryPageActive() && history.renderHistory());
 
@@ -89,6 +91,9 @@ Object.assign(window, {
   openExamDialog: exams.openExamDialog,
   handleExamForActiveCourse: withActiveCourse(exams.openExamDialog),
   useExamPaceAsGoal: exams.useExamPaceAsGoal,
+  // Timer page: today and the current subject
+  editTodayGoal: today.editTodayGoal,
+  saveTodayGoal: today.saveTodayGoal,
   // Subjects
   selectCourse: subjects.selectCourse,
   enableCourseEdit: (courseId) => subjects.openSubjectDialog(courseId),
