@@ -8,7 +8,14 @@ A desktop study tracker for university courses. Time your study sessions per sub
 ![Rust](https://img.shields.io/badge/Rust-000000?style=flat-square&logo=rust&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-003b57?style=flat-square&logo=sqlite&logoColor=white)
 
-![inmo analytics page showing summary stats, a 7-day focus trend with average, goal and previous-week lines, and an activity heatmap](docs/screenshot.png)
+![inmo's Timer page during a session: tiles for today's time against the daily goal, this week, the streak and today's sessions; the running clock; a card for the current subject with its weekly goal and exam countdown; its task list; and a timeline of today's sessions](docs/timer.jpg)
+
+<p>
+  <img src="docs/analytics.jpg" width="49%" alt="Analytics page: summary stats, a 7-day study trend with average, goal and previous-week lines, a 90-day activity heatmap, and each subject's share of the time">
+  <img src="docs/history.jpg" width="49%" alt="History page: every session grouped by day with each day's total, showing the subject, the note and the duration">
+</p>
+
+<sub>Screenshots use sample data.</sub>
 
 ## Features
 
@@ -36,7 +43,7 @@ A desktop study tracker for university courses. Time your study sessions per sub
 
 ## Install
 
-Download the latest `inmo_<version>_x64-setup.exe` from [Releases](https://github.com/rrr090/inmo/releases/latest) and run it. Windows is the only platform with a packaged build.
+Download the latest `inmo_<version>_x64-setup.exe` from [Releases](https://github.com/rrr090/inmo/releases/latest) and run it. It installs in one click, for your Windows account only (no administrator rights needed), and starts inmo when it's done. Windows is the only platform with a packaged build.
 
 ### Upgrading from 1.1 or earlier
 
