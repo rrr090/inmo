@@ -14,6 +14,7 @@ import * as settings from './settings.js';
 import { maybeShowWeeklyReview, openWeeklyReview } from './review.js';
 import { initShortcuts, openShortcutHelp } from './shortcuts.js';
 import * as today from './today.js';
+import { initAccount, wireAccount } from './account.js';
 
 async function init() {
   renderIcons();
@@ -35,6 +36,8 @@ async function init() {
     await showRecoveredSession();
     settings.listenForUpdates();
     initShortcuts();
+    wireAccount();
+    initAccount().catch(err => console.error('Account error:', err));
     await maybeShowWeeklyReview();
   } catch (err) {
     console.error('Initialization error:', err);

@@ -39,6 +39,7 @@ A desktop study tracker for university courses. Time your study sessions per sub
 - **Crash recovery:** a running session is saved as soon as it starts, so a crash or power cut doesn't lose your time. Closing inmo saves it normally.
 - **Backups:** a weekly copy of your data (the newest 8 are kept), a "Back up now" button, and restore from any backup in Settings.
 - **Auto-updates:** new versions download in the background and install when you close inmo. Settings also has "Check now".
+- **Accounts (optional):** create an account in Settings with your email (confirmed by an emailed link), and sign in, change your name or delete the account there. For now it holds only your profile; syncing between devices and studying with friends will build on it.
 - **One window:** opening inmo while it's already running brings the existing window forward instead of starting a second copy.
 
 ## Install
@@ -90,6 +91,8 @@ node build-ui.js   # once: the Rust build embeds its output, tauri-ui-dist/
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
+Accounts use the Supabase project set in `src/supabase-config.js`; [supabase/README.md](supabase/README.md) explains how to point a copy at a project of your own.
+
 To build the Windows installer into `src-tauri/target/release/bundle/nsis/`, set the update-signing key first (see Releasing):
 
 ```bash
@@ -130,4 +133,6 @@ The interface never touches the database directly. It reaches it only through th
 
 ## Data and privacy
 
-Your study data lives in `%APPDATA%\inmo\academic_steam_spotify.db`, a local SQLite file. Weekly backups go to `%APPDATA%\inmo\backups\`. There are no accounts, and your data is never uploaded. The only network request is the update check against GitHub Releases.
+Your study data lives in `%APPDATA%\inmo\academic_steam_spotify.db`, a local SQLite file. Weekly backups go to `%APPDATA%\inmo\backups\`. Your study data is never uploaded.
+
+Accounts are optional. If you create one (Settings → Account), the server keeps your email address, your password (hashed) and the name you choose, and nothing else. Deleting the account in Settings removes all of that. Without an account, the only network request is the update check against GitHub Releases.

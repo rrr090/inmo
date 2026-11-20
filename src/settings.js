@@ -4,6 +4,7 @@ import { state, reloadData } from './state.js';
 import { escapeHtml, errorText } from './format.js';
 import { renderModeTabs } from './timer.js';
 import { renderIcons } from './icons.js';
+import { renderAccount } from './account.js';
 
 // Number settings: key, default, min, max. Must match the clamps in timer.rs.
 const NUMBER_SETTINGS = {
@@ -55,6 +56,7 @@ export function openLink(which) {
 }
 
 export async function renderSettingsPage() {
+  renderAccount();
   for (const key of Object.keys(NUMBER_SETTINGS)) {
     const input = document.getElementById(`setting-${key}`);
     if (input) input.value = await readNumber(key);

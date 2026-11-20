@@ -1060,3 +1060,22 @@
     .subject-exam span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .subject-exam.soon { border-color: rgba(251, 191, 36, 0.35); background: rgba(251, 191, 36, 0.06); }
     .subject-exam.soon b, .subject-exam.soon .icon { color: #fbbf24; }
+
+    /* Settings → Account (account.js) */
+    .account-form { display: flex; flex-direction: column; gap: 12px; max-width: 420px; }
+    .account-form .section-sub { margin: 0; }
+    .account-form .form-group input { width: 100%; }
+    .account-code { font-family: 'JetBrains Mono', monospace; font-size: 18px; letter-spacing: 4px; max-width: 200px; }
+    .account-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
+    .account-actions .btn-secondary.danger-text { margin-right: 0; margin-left: auto; }
+    .account-card { display: flex; align-items: center; gap: 12px; }
+    .account-avatar {
+      width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, var(--accent), #047857); color: #fff; font-weight: 800; font-size: 16px;
+    }
+    .account-who { display: flex; flex-direction: column; min-width: 0; }
+    .account-who b { font-size: 14px; }
+    .account-who span { font-size: 12px; color: var(--text-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .account-note { margin: 12px 0 10px; }
+    #account-body.busy { opacity: 0.6; pointer-events: none; }

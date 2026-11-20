@@ -35,8 +35,10 @@ for (const [, ref] of html.matchAll(/(?:href|src)="\.\.\/(node_modules\/[^"]+)"/
     }
   }
 }
-// Loaded on demand by analytics.js rather than by a tag in index.html.
+// Loaded on demand rather than by a tag in index.html.
 copy('node_modules/chart.js/dist/chart.umd.min.js', ROOT, 'vendor/chart.js/dist/chart.umd.min.js');
+// Loaded by account.js the first time an account is used.
+copy('node_modules/@supabase/supabase-js/dist/umd/supabase.js', ROOT, 'vendor/@supabase/supabase-js/dist/umd/supabase.js');
 const indexPath = path.join(OUT, 'src/index.html');
 fs.writeFileSync(indexPath, fs.readFileSync(indexPath, 'utf8').replaceAll('"../node_modules/', '"../vendor/'));
 
