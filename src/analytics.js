@@ -418,6 +418,7 @@ function renderTrendChart() {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      resizeDelay: 150, // redraw once the window stops moving, not on every pixel of a drag
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: {
@@ -568,6 +569,7 @@ function renderWeekdayChart() {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      resizeDelay: 150, // redraw once the window stops moving, not on every pixel of a drag
       plugins: {
         legend: { display: false },
         tooltip: {
