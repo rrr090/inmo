@@ -36,7 +36,7 @@ jobs:
           node build-ui.js
           cargo test --manifest-path src-tauri/Cargo.toml
 
-      - uses: tauri-apps/tauri-action@v0
+      - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # The key that signs updates; its public half is in tauri.conf.json.
@@ -48,4 +48,4 @@ jobs:
           releaseName: ${{ github.ref_name }}
           releaseBody: 'Download the `_x64-setup.exe` installer below.'
           releaseDraft: true
-          includeUpdaterJson: true
+          uploadUpdaterJson: true
