@@ -8,6 +8,7 @@ use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::db::{self, err, query_json, CmdResult, Db};
+use crate::sync;
 use crate::timer::{Phase, Timer, MAIN_LABEL};
 
 pub const CSV_HEADER: &str = "Date,Start,End,Subject Code,Subject Title,Duration (min),Duration (sec),Note";
@@ -283,11 +284,14 @@ pub fn check_backup_file(path: &Path) -> Result<(), String> {
 
 pub fn restore_from(conn: &mut Connection, path: &Path) -> Result<(), String> {
     check_backup_file(path)?;
+    let before = sync::before_restore(conn).map_err(err)?;
     conn.restore(rusqlite::MAIN_DB, path, None::<fn(rusqlite::backup::Progress)>).map_err(err)?;
     // The backup's pages may carry a different journal mode; put ours back.
     db::tune(conn);
     // A backup from an older version may lack newer columns.
-    db::migrate(conn).map_err(err)
+    db::migrate(conn).map_err(err)?;
+    // So the next sync makes the account match the backup, instead of undoing it.
+    sync::after_restore(conn, &before).map_err(err)
 }
 
 // Replaces everything with a backup. The current data is saved first.
@@ -432,6 +436,56 @@ mod tests {
         assert!(restore_from(&mut conn, &not_inmo).is_err());
         std::fs::write(dir.join("junk.db"), b"hello").unwrap();
         assert!(check_backup_file(&dir.join("junk.db")).is_err());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn restore_while_synced_is_uploaded_instead_of_undone() {
+        let push_all = |conn: &Connection| {
+            let p = sync::pending(conn, 1000).unwrap();
+            for t in &sync::TABLES {
+                sync::mark_pushed(conn, t.name, p[t.name].as_array().unwrap()).unwrap();
+            }
+        };
+        let dir = std::env::temp_dir().join(format!("inmo-test-sync-{}", db::now_ms()));
+        let backup = dir.join("backup.db");
+
+        let mut conn = test_conn();
+        sync::link_account(&conn, "user-1").unwrap();
+        conn.execute("INSERT INTO courses (id, title, code) VALUES ('c1', 'Before', 'C1')", []).unwrap();
+        push_all(&conn);
+        conn.execute("INSERT INTO sync_meta (key, value) VALUES ('cursor:courses', 'early')", []).unwrap();
+        db::snapshot(&conn, &backup).unwrap();
+
+        // Changed and synced after the backup.
+        conn.execute("UPDATE courses SET title = 'After' WHERE id = 'c1'", []).unwrap();
+        conn.execute("INSERT INTO courses (id, title, code) VALUES ('c2', 'Since', 'C2')", []).unwrap();
+        conn.execute("INSERT INTO study_sessions (course_id, duration) VALUES ('c2', 60)", []).unwrap();
+        let synced_at = count(&conn, "SELECT updated_at FROM courses WHERE id = 'c1'");
+        let session = conn.query_row("SELECT uid FROM study_sessions", [], |r| r.get::<_, String>(0)).unwrap();
+        push_all(&conn);
+        conn.execute("UPDATE sync_meta SET value = 'later' WHERE key = 'cursor:courses'", []).unwrap();
+
+        restore_from(&mut conn, &backup).unwrap();
+        let p = sync::pending(&conn, 1000).unwrap();
+        let courses = p["courses"].as_array().unwrap();
+        // The backup's version goes up, newer than what the server has...
+        let c1 = courses.iter().find(|r| r["id"] == "c1").unwrap();
+        assert_eq!(c1["title"], "Before");
+        assert!(c1["updated_at"].as_i64().unwrap() > synced_at);
+        // ...and what it doesn't have is deleted from the account too.
+        assert!(courses.iter().any(|r| r["id"] == "c2" && r["deleted"] == true));
+        assert!(p["study_sessions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|r| r["id"] == session.as_str() && r["deleted"] == true));
+        // Same account, and downloads carry on from where they were.
+        let meta = |k: &str| {
+            conn.query_row("SELECT value FROM sync_meta WHERE key = ?", [k], |r| r.get::<_, String>(0)).unwrap()
+        };
+        assert_eq!(meta("user_id"), "user-1");
+        assert_eq!(meta("cursor:courses"), "later");
         let _ = std::fs::remove_dir_all(dir);
     }
 }

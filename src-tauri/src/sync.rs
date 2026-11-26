@@ -353,6 +353,56 @@ fn cursor(conn: &Connection, table_name: &str) -> rusqlite::Result<Option<String
         .optional()
 }
 
+// ---------- Restoring a backup ----------
+
+// A restored backup brings its own, older bookkeeping: its rows look already
+// uploaded and older than the server's, so the next sync would put back what
+// the restore replaced. What's needed from before the restore to prevent that.
+pub struct BeforeRestore {
+    // Which account this database syncs with, and how far it has downloaded.
+    meta: Vec<(String, String)>,
+    // Every row that exists now, by its key on every device.
+    keys: Vec<(&'static Table, Vec<String>)>,
+}
+
+pub fn before_restore(conn: &Connection) -> rusqlite::Result<BeforeRestore> {
+    let mut stmt = conn.prepare("SELECT key, value FROM sync_meta WHERE key = 'user_id' OR key LIKE 'cursor:%'")?;
+    let meta = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<rusqlite::Result<_>>()?;
+    let mut keys = Vec::new();
+    for t in &TABLES {
+        let mut stmt = conn.prepare(&format!("SELECT {key} FROM {} WHERE {key} IS NOT NULL", t.name, key = t.key))?;
+        let ids = stmt.query_map([], |r| r.get(0))?.collect::<rusqlite::Result<Vec<String>>>()?;
+        keys.push((t, ids));
+    }
+    Ok(BeforeRestore { meta, keys })
+}
+
+// After a restore (and its migration): the backup's rows become the newest
+// change, rows it doesn't have are deleted for the account too, and the
+// bookkeeping of which account and how far downloads got is put back.
+pub fn after_restore(conn: &Connection, before: &BeforeRestore) -> rusqlite::Result<()> {
+    let tx = conn.unchecked_transaction()?;
+    tx.execute("DELETE FROM sync_meta WHERE key = 'user_id' OR key LIKE 'cursor:%'", [])?;
+    for (key, value) in &before.meta {
+        tx.execute("INSERT INTO sync_meta (key, value) VALUES (?, ?)", [key, value])?;
+    }
+    for (t, ids) in &before.keys {
+        tx.execute(
+            &format!("UPDATE {} SET updated_at = MAX(COALESCE(updated_at, 0) + 1, {NOW_MS}), sync_dirty = 1", t.name),
+            [],
+        )?;
+        let mut gone = tx.prepare(&format!(
+            "INSERT OR REPLACE INTO sync_tombstones (tbl, id, deleted_at)
+             SELECT ?1, ?2, {NOW_MS} WHERE NOT EXISTS (SELECT 1 FROM {} WHERE {} = ?2)",
+            t.name, t.key
+        ))?;
+        for id in ids {
+            gone.execute(params![t.name, id])?;
+        }
+    }
+    tx.commit()
+}
+
 // ---------- Commands (src/sync.js) ----------
 
 #[tauri::command(async)]
