@@ -154,7 +154,7 @@ export function handleOpenBackups() {
 export async function handleRestoreBackup() {
   const confirmed = await confirmDialog({
     title: 'Restore from a backup?',
-    message: 'Everything in inmo will be replaced with the backup you pick. Your current data is saved to the backups folder first, so this can be undone by restoring that file.',
+    message: 'Everything in inmo will be replaced with the backup you pick. Your current data is saved to the backups folder first, so this can be undone by restoring that file. If you\'re signed in, your account is changed to match the backup too.',
     confirmLabel: 'Choose backup…',
     danger: false,
   });
