@@ -33,6 +33,7 @@
       <div class="nav-link active" data-page="timer-page" onclick="switchPage('timer-page', this)"><span data-icon="timer"></span>Timer</div>
       <div class="nav-link" data-page="analytics-page" onclick="switchPage('analytics-page', this)"><span data-icon="chart-column"></span>Analytics</div>
       <div class="nav-link" data-page="history-page" onclick="switchPage('history-page', this)"><span data-icon="history"></span>History</div>
+      <div class="nav-link" data-page="friends-page" onclick="switchPage('friends-page', this)"><span data-icon="users"></span>Friends<span class="nav-badge is-hidden" id="friends-badge"></span></div>
       <div class="nav-link" data-page="settings-page" onclick="switchPage('settings-page', this)"><span data-icon="settings"></span>Settings</div>
     </div>
 
@@ -266,7 +267,18 @@
       <button class="btn-outline history-more is-hidden" id="history-more" onclick="showMoreHistory()">Show more</button>
     </div>
 
-    <!-- PAGE 4: SETTINGS -->
+    <!-- PAGE 4: FRIENDS (friends.js) -->
+    <div id="friends-page" class="page">
+      <div class="page-header">
+        <div>
+          <h1>Friends</h1>
+          <p>See when your friends are studying, and how much.</p>
+        </div>
+      </div>
+      <div id="friends-body" class="page-stack"></div>
+    </div>
+
+    <!-- PAGE 5: SETTINGS -->
     <div id="settings-page" class="page">
       <div class="page-header">
         <div>

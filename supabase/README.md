@@ -5,7 +5,7 @@ inmo's accounts are optional. With the values in `src/supabase-config.js` empty,
 ## 1. Create the project
 
 1. Sign in at [supabase.com](https://supabase.com) and create a new project. The free tier is enough to start.
-2. In **SQL Editor → New query**, paste all of [`schema.sql`](schema.sql) and run it. It creates the `profiles` table with row-level security, the trigger that makes a profile for each new account, and `delete_my_account()`. The dashboard warns that it is destructive because of its `drop … if exists` lines; on a new project they have nothing to drop.
+2. In **SQL Editor → New query**, paste all of [`schema.sql`](schema.sql) and run it. It creates the `profiles` table with row-level security, the trigger that makes a profile for each new account, `delete_my_account()`, the sync tables, and the friends tables and functions (`friendships`, `statuses`, `friend_signals`, `friend_add()` and the rest). It also adds `statuses` and `friend_signals` to the `supabase_realtime` publication, so the app hears about friends' status changes and new requests at once. On a project set up before friends existed, run the whole file again: it only adds what's missing, and gives existing accounts a friend code. The dashboard warns that it is destructive because of its `drop … if exists` lines; on a new project they have nothing to drop.
 3. In **Authentication → URL Configuration**, set the **Site URL** to the page the confirmation link should land on (inmo uses its GitHub page). The default, `http://localhost:3000`, shows a browser error.
 
 ## 2. Connect the app

@@ -6,7 +6,7 @@ import { toggleTimer, togglePause, setMode } from './timer.js';
 import { libraryOrder, selectCourse, openSubjectDialog } from './subjects.js';
 import { openWeeklyReview } from './review.js';
 
-const PAGES = ['timer-page', 'analytics-page', 'history-page', 'settings-page'];
+const PAGES = ['timer-page', 'analytics-page', 'history-page', 'friends-page', 'settings-page'];
 
 export const SHORTCUTS = [
   ['Timer', [
@@ -28,7 +28,8 @@ export const SHORTCUTS = [
     [['Ctrl', '1'], 'Timer'],
     [['Ctrl', '2'], 'Analytics'],
     [['Ctrl', '3'], 'History'],
-    [['Ctrl', '4'], 'Settings'],
+    [['Ctrl', '4'], 'Friends'],
+    [['Ctrl', '5'], 'Settings'],
     [['/'], 'Search session history'],
     [['W'], 'Weekly review'],
     [['?'], 'This list'],
@@ -78,7 +79,7 @@ function onKeydown(e) {
   }
   const ctrl = e.ctrlKey || e.metaKey;
 
-  if (ctrl && !e.altKey && !e.shiftKey && /^[1-4]$/.test(e.key)) {
+  if (ctrl && !e.altKey && !e.shiftKey && /^[1-5]$/.test(e.key)) {
     e.preventDefault();
     goTo(Number(e.key) - 1);
     return;

@@ -1,7 +1,7 @@
 // The Supabase project behind inmo accounts. Both values are meant to be public:
 // the publishable key only allows what the row-level security rules in
 // supabase/schema.sql allow, which is each signed-in person reading and
-// changing their own rows. Leave them empty and the app runs without accounts.
+// changing their own rows (and seeing accepted friends' status). Leave them empty and the app runs without accounts.
 // Never put a secret (sb_secret_…) or service_role key here.
 //
 // Find them in the Supabase dashboard: the URL on the project's home page, the

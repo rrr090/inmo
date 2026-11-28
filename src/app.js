@@ -16,6 +16,7 @@ import { initShortcuts, openShortcutHelp } from './shortcuts.js';
 import * as today from './today.js';
 import { initAccount, wireAccount } from './account.js';
 import { initSync, scheduleSync, syncNow } from './sync.js';
+import { initFriends, showFriendsPage, friendsDataChanged } from './friends.js';
 
 async function init() {
   renderIcons();
@@ -29,6 +30,7 @@ async function init() {
     onDataChanged(renderTimerRing);
     onDataChanged(today.loadToday);
     onDataChanged(() => scheduleSync());
+    onDataChanged(friendsDataChanged);
     onDataChanged(() => analytics.isAnalyticsPageActive() && analytics.renderAnalyticsPage());
     onDataChanged(() => history.isHistoryPageActive() && history.renderHistory());
 
@@ -40,6 +42,7 @@ async function init() {
     initShortcuts();
     wireAccount();
     initSync();
+    initFriends();
     initAccount().then(syncNow).catch(err => console.error('Account error:', err));
     await maybeShowWeeklyReview();
   } catch (err) {
@@ -69,6 +72,7 @@ async function switchPage(pageId, element) {
 
   if (pageId === 'analytics-page') await analytics.renderAnalyticsPage();
   if (pageId === 'history-page') await history.renderHistory();
+  if (pageId === 'friends-page') showFriendsPage();
   if (pageId === 'settings-page') await settings.renderSettingsPage();
   updateInPageWidget();
 }

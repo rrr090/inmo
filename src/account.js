@@ -2,10 +2,12 @@
 // Settings → Account. With EMAIL_CODES on, sign-up and password resets are
 // confirmed with a 6-digit code from an email, so there is no browser round trip;
 // without it, sign-up is confirmed by the email's link and there is no reset yet.
-// While signed in, sync.js keeps the study data in step with the account.
+// While signed in, sync.js keeps the study data in step with the account, and
+// friends.js shares a status with friends.
 import { showToast, confirmDialog } from './notify.js';
 import { escapeHtml, errorText } from './format.js';
 import { syncNow, renderSyncStatus } from './sync.js';
+import { clearStatus } from './friends.js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY, EMAIL_CODES, EMAIL_LINK_LANDING } from './supabase-config.js';
 
 // Where an email's confirmation link lands. Without it, Supabase sends the
@@ -39,9 +41,21 @@ function loadLibrary() {
   return loading;
 }
 
-// For sync.js: the client, and who is signed in (null when nobody is).
+// For sync.js and friends.js: the client, and who is signed in (null when nobody is).
 export const accountClient = () => getClient();
 export const currentUser = () => user;
+export const accountsConfigured = () => configured;
+
+// Called with the user (or null) whenever someone signs in or out.
+const accountListeners = [];
+export function onAccountChange(fn) {
+  accountListeners.push(fn);
+}
+function notifyAccount() {
+  for (const fn of accountListeners) {
+    Promise.resolve().then(() => fn(user)).catch(err => console.error('Account listener failed:', err));
+  }
+}
 
 async function getClient() {
   if (client) return client;
@@ -60,9 +74,11 @@ async function getClient() {
       setTimeout(() => {
         loadProfile();
         syncNow();
+        notifyAccount();
       }, 0);
-    } else if (view === 'account' || view === 'edit-name') {
-      view = 'signin';
+    } else {
+      if (view === 'account' || view === 'edit-name') view = 'signin';
+      setTimeout(notifyAccount, 0);
     }
     renderAccount();
   });
@@ -82,6 +98,7 @@ export async function initAccount() {
     user = data.session?.user ?? null;
     if (user) {
       view = 'account';
+      notifyAccount();
       await loadProfile();
     }
   } catch (err) {
@@ -118,7 +135,7 @@ function views() {
     case 'signup':
       return `
         <form class="account-form" data-submit="signup">
-          ${field('acc-name', 'Name', 'text', 'maxlength="40" autocomplete="nickname" placeholder="Shown to friends in shared features later"')}
+          ${field('acc-name', 'Name', 'text', 'maxlength="40" autocomplete="nickname" placeholder="Shown to your friends"')}
           ${field('acc-email', 'Email', 'email', `required autocomplete="email" value="${email}"`)}
           ${field('acc-password', 'Password', 'password', 'required minlength="8" autocomplete="new-password" placeholder="At least 8 characters"')}
           <div class="account-actions">
@@ -201,7 +218,7 @@ function views() {
     default:
       return `
         <form class="account-form" data-submit="signin">
-          <p class="section-sub">Optional. Sign in to sync your subjects, tasks and sessions between devices.</p>
+          <p class="section-sub">Optional. Sign in to sync your subjects, tasks and sessions between devices, and to add friends.</p>
           ${field('acc-email', 'Email', 'email', `required autocomplete="email" value="${email}"`)}
           ${field('acc-password', 'Password', 'password', 'required autocomplete="current-password"')}
           <div class="account-actions">
@@ -319,11 +336,13 @@ const ACTIONS = {
     showToast(EMAIL_CODES ? 'New code sent' : 'Email sent again', { type: 'info' });
   }),
   signout: () => run(async (sb) => {
+    await clearStatus();
     const { error } = await sb.auth.signOut();
     if (error) throw error;
     user = null;
     profile = null;
     view = 'signin';
+    notifyAccount();
     showToast('Signed out', { type: 'info' });
   }),
   delete: async () => {
@@ -340,6 +359,7 @@ const ACTIONS = {
       user = null;
       profile = null;
       view = 'signin';
+      notifyAccount();
       showToast('Account deleted', { type: 'info' });
     });
   },

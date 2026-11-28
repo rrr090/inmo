@@ -27,7 +27,7 @@ A desktop study tracker for university courses. Time your study sessions per sub
 - **Terms and colors:** put subjects in a term ("Fall 2026") to group the library, folding away old terms, and show one term at a time in Analytics. Each subject can have its own color, used in the library, the timer, history and every chart. Subjects left on the automatic color get one that no other subject uses, while there is one.
 - **Better tasks:** due dates, drag (or arrow-key) reordering, and a "Due soon" list across all subjects on the Timer page. Pick a task to work on and the sessions are logged against it: each task shows the time spent on it, and History shows and searches it.
 - **Weekly review:** the first time you open inmo each week, a look back at last week: hours per day against your daily goal, each subject against its weekly goal, tasks done, and exams and due tasks coming up. Also on the Analytics page, for any week.
-- **Keyboard shortcuts:** Space starts and stops the timer, Ctrl+1 to Ctrl+4 switch pages, Alt+↑/↓ changes subject, and single keys add a task, a subject or a note. Press ? for the list.
+- **Keyboard shortcuts:** Space starts and stops the timer, Ctrl+1 to Ctrl+5 switch pages, Alt+↑/↓ changes subject, and single keys add a task, a subject or a note. Press ? for the list.
 - **Analytics:** a 7/30/90-day focus trend (total or split by subject) with daily average, goal and previous-period lines, summary stats, week-over-week comparison, a 90-day activity heatmap, each subject's share of your time, weekday averages and a weekday × hour grid of when you study.
 - **Goals and streaks:** a daily target (2 hours unless you change it), optional weekly goals per subject, a running study streak and your longest streak ever.
 - **Session notes:** type what you're working on under the timer, and it's saved with the session. History shows the notes and can search them, along with subject names.
@@ -40,6 +40,7 @@ A desktop study tracker for university courses. Time your study sessions per sub
 - **Backups:** a weekly copy of your data (the newest 8 are kept), a "Back up now" button, and restore from any backup in Settings.
 - **Auto-updates:** new versions download in the background and install when you close inmo. Settings also has "Check now".
 - **Accounts (optional):** create an account in Settings with your email (confirmed by an emailed link), and sign in, change your name or delete the account there. While you're signed in, your subjects, tasks and sessions sync with the account, so they follow you to other computers. inmo keeps working from its own database, offline included, and catches up when it's back online. Settings stay per computer.
+- **Friends (optional, needs an account):** add people by their 8-character friend code and accept their requests on the Friends page. Friends see whether you're studying right now and for how long, your hours today and this week, and your streak. They see the subject only if you turn that on. Notes, tasks and sessions are never shared.
 - **One window:** opening inmo while it's already running brings the existing window forward instead of starting a second copy.
 
 ## Install
@@ -121,7 +122,8 @@ To build a signed installer locally instead, set `TAURI_SIGNING_PRIVATE_KEY` to 
 | Import/export | `src-tauri/src/data_io.rs` | CSV export and import, backup and restore |
 | Tray, updates | `src-tauri/src/tray.rs`, `updater.rs`, `idle.rs` | Tray icon, global shortcut, start with Windows, auto-updates, idle time |
 | API bridge | `src/tauri-api.js` | Exposes `window.api`, where each method invokes one Rust command |
-| Interface | `src/index.html`, `src/app.js` and one module per page | Timer, subjects, tasks, analytics, history, settings |
+| Interface | `src/index.html`, `src/app.js` and one module per page | Timer, subjects, tasks, analytics, history, friends, settings |
+| Accounts | `src/account.js`, `sync.js`, `friends.js`, `supabase/schema.sql` | Sign-in, syncing study data, friends and their status |
 | Floating timer | `src/mini-widget.html`, `src/tauri-mini.js` | Always-on-top widget fed by the backend timer |
 | Frontend build | `build-ui.js` | Copies `src/` and the libraries it loads from `node_modules` into `tauri-ui-dist/` for bundling |
 
@@ -135,4 +137,6 @@ The interface never touches the database directly. It reaches it only through th
 
 Your study data lives in `%APPDATA%\inmo\academic_steam_spotify.db`, a local SQLite file. Weekly backups go to `%APPDATA%\inmo\backups\`. Without an account, your study data never leaves this computer.
 
-Accounts are optional. If you create one (Settings → Account), the server keeps your email address, your password (hashed) and the name you choose, and, while you're signed in, a copy of your subjects, tasks and sessions (notes included) so other devices can sync. Settings aren't uploaded. Only you can read your rows. Deleting the account in Settings removes all of it from the server; the copy on this computer stays. Without an account, the only network request is the update check against GitHub Releases.
+Accounts are optional. If you create one (Settings → Account), the server keeps your email address, your password (hashed) and the name you choose, and, while you're signed in, a copy of your subjects, tasks and sessions (notes included) so other devices can sync. Settings aren't uploaded. Only you can read your rows, except that friends you've accepted can see your name and status (see below). Deleting the account in Settings removes all of it from the server; the copy on this computer stays. Without an account, the only network request is the update check against GitHub Releases.
+
+Friends: everyone with an account has a friend code. Someone who has your code can send you a request, and only after you accept can they see your name and your status: whether you're studying or on a break, how long the session has run, your hours today and this week, your streak and when you last studied. The subject is shown only if you turn on "Show friends what I'm studying". While you're signed in, inmo updates that status on the server when a session starts or stops and once a minute during one. "New code" on the Friends page makes the old code stop working; removing a friend stops you both seeing each other's status.
